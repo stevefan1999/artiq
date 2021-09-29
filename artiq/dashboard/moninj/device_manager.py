@@ -10,6 +10,7 @@ from artiq.dashboard.moninj.util import setup_from_ddb
 from artiq.dashboard.moninj.widgets.dac import DACWidget
 from artiq.dashboard.moninj.widgets.dds import DDSWidget
 from artiq.dashboard.moninj.widgets.ttl import TTLWidget
+from artiq.dashboard.moninj.widgets.urukul import UrukulWidget
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +41,8 @@ class DeviceManager:
         self.docks = {
             "TTL": Layout(),
             "DDS": Layout(),
-            "DAC": Layout()
+            "DAC": Layout(),
+            "Urukul": Layout()
         }
 
     def init_ddb(self, ddb):
@@ -61,6 +63,7 @@ class DeviceManager:
         dac = self.docks["DAC"]
         dds = self.docks["DDS"]
         ttl = self.docks["TTL"]
+        urukul = self.docks["Urukul"]
         for to_remove in self.description - description:
             widget = self.widgets_by_uid[to_remove.uid]
             del self.widgets_by_uid[to_remove.uid]
@@ -80,6 +83,11 @@ class DeviceManager:
                 widget.deleteLater()
                 del dac.widgets[(widget.spi_channel, widget.channel)]
                 dac.setup_layout(dac.widgets.values())
+            elif isinstance(widget, UrukulWidget):
+                await self.setup_urukul_monitoring(False, widget.bus_channel, widget.channel)
+                widget.deleteLater()
+                del urukul.widgets[(widget.bus_channel, widget.channel)]
+                urukul.setup_layout(urukul.widgets.values())
             else:
                 raise ValueError
 
@@ -101,6 +109,10 @@ class DeviceManager:
                 dac.widgets[(widget.spi_channel, widget.channel)] = widget
                 dac.setup_layout(dac.widgets.values())
                 await self.setup_dac_monitoring(True, widget.spi_channel, widget.channel)
+            elif isinstance(widget, UrukulWidget):
+                urukul.widgets[(widget.bus_channel, widget.channel)] = widget
+                urukul.setup_layout(urukul.widgets.values())
+                await self.setup_urukul_monitoring(True, widget.bus_channel, widget.channel)
             else:
                 raise ValueError
 
@@ -147,10 +159,33 @@ class DeviceManager:
         if self.moninj_connection_rpc is not None:
             await self.moninj_connection_rpc.monitor_probe(enable, spi_channel, channel)
 
+    async def setup_urukul_monitoring(self, enable, bus_channel, channel):
+        if self.moninj_connection_rpc is not None:
+            await self.moninj_connection_rpc.monitor_probe(enable, bus_channel, channel)  # register addresses
+            await self.moninj_connection_rpc.monitor_probe(enable, bus_channel, channel + 4)  # first data
+            await self.moninj_connection_rpc.monitor_probe(enable, bus_channel, channel + 8)  # second data
+            if channel == 0:
+                await self.moninj_connection_rpc.monitor_injection(enable, bus_channel, 0)
+                await self.moninj_connection_rpc.monitor_injection(enable, bus_channel, 1)
+                await self.moninj_connection_rpc.monitor_injection(enable, bus_channel, 2)
+                if enable:
+                    await self.moninj_connection_rpc.get_injection_status(bus_channel, 0)
+
+    async def urukul_set_override(self, enable, bus_channel):
+        if self.moninj_connection_rpc is not None:
+            await self.moninj_connection_rpc.inject(bus_channel, 0, int(enable))
+
+    async def urukul_write(self, bus_channel, is_cfg, data):
+        if self.moninj_connection_rpc is not None:
+            await self.moninj_connection_rpc.inject(bus_channel, 1, int(is_cfg))
+            await self.moninj_connection_rpc.inject(bus_channel, 2, data)
+
     def monitor_cb(self, channel, probe, value):
         ttl = self.docks["TTL"]
         dds = self.docks["DDS"]
         dac = self.docks["DAC"]
+        urukul = self.docks["Urukul"]
+
         if channel in ttl.widgets:
             widget = ttl.widgets[channel]
             if probe == TTLProbe.level.value:
@@ -165,6 +200,16 @@ class DeviceManager:
         if (channel, probe) in dac.widgets:
             widget = dac.widgets[(channel, probe)]
             widget.cur_value = value
+            widget.refresh_display()
+        if (channel, probe % 4) in urukul.widgets:
+            widget = urukul.widgets[(channel, probe % 4)]
+            type = probe // 4
+            if type == 0:  # probes 0-3: register addresses
+                widget.update_reg(value)
+            elif type == 1:  # probes 4-7: data_high (for 64 bit transfer)
+                widget.update_data_high(value)
+            elif type == 2:  # probes 8-11: data_low (for 64 bit) or just data (32 bit)
+                widget.update_data_low(value)
             widget.refresh_display()
 
     def injection_status_cb(self, channel, override, value):
@@ -243,6 +288,8 @@ class DeviceManager:
                     await self.setup_dds_monitoring(True, bus_channel, channel)
                 for spi_channel, channel in self.docks["DAC"].widgets.keys():
                     await self.setup_dac_monitoring(True, spi_channel, channel)
+                for bus_channel, channel in self.docks["Urukul"].widgets.keys():
+                    await self.setup_urukul_monitoring(True, bus_channel, channel)
                 self.control_widgets(enabled=True)
 
     async def close(self):

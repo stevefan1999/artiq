@@ -1,3 +1,5 @@
+import asyncio
+
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QFrame, QLabel, QGridLayout, QSizePolicy, QStackedWidget, QToolButton, QLineEdit
 from artiq.language.units import MHz
@@ -14,6 +16,12 @@ from artiq.coredevice.spi2 import SPI_END
 class UrukulWidget(QFrame):
     def __init__(self, dm, bus_channel, channel, title, sw_channel, ref_clk, pll, is_9910, clk_div=0):
         QFrame.__init__(self)
+        self.setStyleSheet("""
+QLineEdit[enable="false"] {
+    color: #808080; 
+    background-color: #F0F0F0;
+}
+        """)
 
         self.bus_channel = bus_channel
         self.channel = channel
@@ -73,10 +81,11 @@ class UrukulWidget(QFrame):
         # self.freq_label.setSizePolicy(QtWidgets.QSizePolicy.Ignored,
         #                               QtWidgets.QSizePolicy.Preferred)
         self.freq_stack.addWidget(self.freq_label)
-        self.freq_edit = QLineEdit()
+        self.freq_edit = QLabel()
         self.freq_edit.setAlignment(Qt.AlignCenter)
-        # self.freq_edit.setInputMask("000.0000000")
-        self.freq_edit.setReadOnly(True)
+        # self.freq_edit.setInputMask("0.0000")
+        # self.freq_edit.setReadOnly(True)
+        # self.freq_edit.setEnabled(False)
         # self.freq_edit.setTextMargins(0, 0, 0, 0)
         self.freq_edit.setSizePolicy(QSizePolicy.Ignored,
                                      QSizePolicy.Preferred)
@@ -96,9 +105,9 @@ class UrukulWidget(QFrame):
         grid.setRowStretch(4, 1)
 
         self.programmatic_change = False
-        self.override.clicked.connect(self.override_toggled)
-        self.level.clicked.connect(self.level_toggled)
-        self.freq_edit.returnPressed.connect(self.frequency_edited)
+        self.override.clicked.connect(lambda override: asyncio.ensure_future(self.override_toggled(override)))
+        self.level.clicked.connect(lambda toggled: asyncio.ensure_future(self.level_toggled(toggled)))
+        # self.freq_edit.returnPressed.connect(lambda: asyncio.ensure_future(self.frequency_edited()))
 
         self.cur_level = False
         self.cur_override = False
@@ -124,27 +133,28 @@ class UrukulWidget(QFrame):
         self.freq_stack.setCurrentIndex(0)
         QFrame.leaveEvent(self, event)
 
-    def override_toggled(self, override):
+    async def override_toggled(self, override):
         if self.programmatic_change:
             return
-        self.urukul_set_override(self.bus_channel, override)
-        self.freq_edit.setReadOnly(not override)
-        # if override:
-        #     if self.level.isChecked():
-        #         self.set_on_off(self.sw_channel, "1")
-        #     else:
-        #         self.set_on_off(self.sw_channel, "0")
-        # else:
-        #     self.set_on_off(self.sw_channel, "exp")
+        await self.urukul_set_override(self.bus_channel, override)
+        # self.freq_edit.setReadOnly(not override)
+        # self.freq_edit.setEnabled(override)
+        if override:
+            if self.level.isChecked():
+                await self.set_on_off(self.sw_channel, "1")
+            else:
+                await self.set_on_off(self.sw_channel, "0")
+        else:
+            await self.set_on_off(self.sw_channel, "exp")
 
-    def level_toggled(self, level):
+    async def level_toggled(self, level):
         if self.programmatic_change:
             return
-        # if self.override.isChecked():
-        #     if level:
-        #         self.set_on_off(self.sw_channel, "1")
-        #     else:
-        #         self.set_on_off(self.sw_channel, "0")
+        if self.override.isChecked():
+            if level:
+                await self.set_on_off(self.sw_channel, "1")
+            else:
+                await self.set_on_off(self.sw_channel, "0")
 
     def update_reg(self, reg):
         if self.is_9910:
@@ -161,7 +171,7 @@ class UrukulWidget(QFrame):
             if self.cur_reg == AD9912_POW1:
                 ftw = int64((data & 0xffff)) << 32
                 self.cur_frequency = self._ftw_to_freq(ftw)
-        print(self.cur_frequency)
+        # print(self.cur_frequency)
 
     def update_data_low(self, data):
         if self.is_9910:
@@ -174,18 +184,18 @@ class UrukulWidget(QFrame):
             if self.cur_reg == AD9912_POW1:
                 # mask to avoid improper sign extension
                 self.cur_frequency += self._ftw_to_freq(int64(data & 0xffffffff))
-        print(self.cur_frequency)
+        # print(self.cur_frequency)
 
-    def frequency_edited(self):
+    async def frequency_edited(self):
         freq = float(self.freq_edit.text()) * MHz
         self.cur_frequency = freq
         print("frequency edited: ", freq)
-        self.urukul_write(self.bus_channel, True,
+        await self.urukul_write(self.bus_channel, True,
                           self._get_cfg_word(urukul.SPI_CONFIG, 8, urukul.SPIT_DDS_WR, self.channel + 4))
-        self.urukul_write(self.bus_channel, False, AD9910_REG_FTW() << 24)
-        self.urukul_write(self.bus_channel, True,
+        await self.urukul_write(self.bus_channel, False, AD9910_REG_FTW() << 24)
+        await self.urukul_write(self.bus_channel, True,
                           self._get_cfg_word(urukul.SPI_CONFIG | SPI_END, 32, urukul.SPIT_DDS_WR, self.channel + 4))
-        self.urukul_write(self.bus_channel, False, self._freq_to_ftw(freq))
+        await self.urukul_write(self.bus_channel, False, self._freq_to_ftw(freq))
 
     def _get_cfg_word(self, flags, length, div, cs):
         return int32(flags | ((length - 1) << 8) | ((div - 2) << 16) | (cs << 24))
@@ -215,8 +225,8 @@ class UrukulWidget(QFrame):
 
         self.on_off_label.setText(f'<font size="2">{on_off_s}</font>')
 
-        self.freq_label.setText(f'<font size="4"{color}>{self.cur_frequency / 1e6:.7f}</font>')
-        self.freq_edit.setText("{:.7f}".format(self.cur_frequency / 1e6))
+        self.freq_label.setText(f'<font size="4"{color}>{self.cur_frequency / 1e6:.4f}</font>')
+        self.freq_edit.setText("{:.4f}".format(self.cur_frequency / 1e6))
 
         self.programmatic_change = True
         try:

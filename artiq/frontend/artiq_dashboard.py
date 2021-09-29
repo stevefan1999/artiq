@@ -40,12 +40,6 @@ def get_argparser():
         "--port-broadcast", default=1067, type=int,
         help="TCP port to connect to for broadcasts")
     parser.add_argument(
-        "--port-proxy-core-pubsub", default=1383, type=int,
-        help="TCP port to connect to for core device proxy (for data)")
-    parser.add_argument(
-        "--port-proxy-core-rpc", default=1384, type=int,
-        help="TCP port to connect to for core device proxy (for control)")
-    parser.add_argument(
         "--db-file", default=None,
         help="database file for local GUI settings")
     common_args.verbosity_args(parser)
@@ -205,6 +199,7 @@ def main():
     right_docks = [
         d_explorer, d_shortcuts,
         d_ttl_dds.ttl_dock, d_ttl_dds.dds_dock, d_ttl_dds.dac_dock,
+        d_ttl_dds.urukul_dock,
         d_datasets, d_applets
     ]
     main_window.addDockWidget(QtCore.Qt.RightDockWidgetArea, right_docks[0])

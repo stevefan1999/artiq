@@ -53,19 +53,19 @@
             "properties": {
                 "master_addr": {
                     "type": "string",
-                    "default": "::1"
+                    "description": "address to connect to master"
                 },
                 "host": {
                     "type": "string",
-                    "default": "::1"
+                    "description": "address for the proxy to listen to"
                 },
                 "pubsub_port": {
                     "type": "number",
-                    "default": 1383
+                    "description": "ports for moninj data subscription"
                 },
                 "rpc_port": {
                     "type": "number",
-                    "default": 1384
+                    "description": "port for moninj control"
                 }
             }
         },

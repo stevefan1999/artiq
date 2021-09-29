@@ -60,6 +60,34 @@ RAM_MODE_BIDIR_RAMP = 2
 RAM_MODE_CONT_BIDIR_RAMP = 3
 RAM_MODE_CONT_RAMPUP = 4
 
+def AD9910_REG_FTW():
+    return _AD9910_REG_FTW
+
+def AD9910_REG_ASF():
+    return _AD9910_REG_ASF
+
+def AD9910_REG_PROFILE0():
+    return _AD9910_REG_PROFILE0
+
+def AD9910_REG_PROFILE7():
+    return _AD9910_REG_PROFILE7
+
+
+def AD9910_REG_FTW():
+    return _AD9910_REG_FTW
+
+
+def AD9910_REG_ASF():
+    return _AD9910_REG_ASF
+
+
+def AD9910_REG_PROFILE0():
+    return _AD9910_REG_PROFILE0
+
+
+def AD9910_REG_PROFILE7():
+    return _AD9910_REG_PROFILE7
+
 
 class SyncDataUser:
     def __init__(self, core, sync_delay_seed, io_update_delay):

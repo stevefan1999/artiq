@@ -9,12 +9,14 @@ class MonInj:
         self.ttl_dock = MonInjDock("TTL")
         self.dds_dock = MonInjDock("DDS")
         self.dac_dock = MonInjDock("DAC")
+        self.urukul_dock = MonInjDock("Urukul")
 
         self.dm = DeviceManager()
         self.dm.docks.update({
             "TTL": Layout(lambda x: self.ttl_dock.layout_widgets(x)),
             "DDS": Layout(lambda x: self.dds_dock.layout_widgets(x)),
-            "DAC": Layout(lambda x: self.dac_dock.layout_widgets(x))
+            "DAC": Layout(lambda x: self.dac_dock.layout_widgets(x)),
+            "Urukul": Layout(lambda x: self.urukul_dock.layout_widgets(x))
         })
 
         self.subscriber = Subscriber("devices", self.dm.init_ddb, self.dm.notify)
