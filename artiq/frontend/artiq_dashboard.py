@@ -188,7 +188,7 @@ def main():
     smgr.register(d_applets)
     broadcast_clients["ccb"].notify_cbs.append(d_applets.ccb_notify)
 
-    d_ttl_dds = moninj.MonInj(args.server, args.proxy_core_pubsub_port, args.proxy_core_rpc_port)
+    d_ttl_dds = moninj.MonInj()
     loop.run_until_complete(d_ttl_dds.start(args.server, args.port_notify))
     atexit_register_coroutine(d_ttl_dds.stop)
 

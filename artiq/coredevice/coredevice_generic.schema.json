@@ -47,6 +47,28 @@
             "description": "IPv4 address",
             "default": "192.168.1.70"
         },
+        "moninj": {
+            "type": "object",
+            "description": "moninj proxy settings",
+            "properties": {
+                "master_addr": {
+                    "type": "string",
+                    "default": "::1"
+                },
+                "host": {
+                    "type": "string",
+                    "default": "::1"
+                },
+                "pubsub_port": {
+                    "type": "number",
+                    "default": 1383
+                },
+                "rpc_port": {
+                    "type": "number",
+                    "default": 1384
+                }
+            }
+        },
         "vendor": {
             "type": "string",
             "description": "Board vendor"
