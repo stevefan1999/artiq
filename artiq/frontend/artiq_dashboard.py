@@ -5,7 +5,6 @@ import asyncio
 import atexit
 import os
 import logging
-import sys
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 from qasync import QEventLoop
@@ -40,6 +39,12 @@ def get_argparser():
     parser.add_argument(
         "--port-broadcast", default=1067, type=int,
         help="TCP port to connect to for broadcasts")
+    parser.add_argument(
+        "--port-proxy-core-pubsub", default=1383, type=int,
+        help="TCP port to connect to for core device proxy (for data)")
+    parser.add_argument(
+        "--port-proxy-core-rpc", default=1384, type=int,
+        help="TCP port to connect to for core device proxy (for control)")
     parser.add_argument(
         "--db-file", default=None,
         help="database file for local GUI settings")
@@ -183,7 +188,7 @@ def main():
     smgr.register(d_applets)
     broadcast_clients["ccb"].notify_cbs.append(d_applets.ccb_notify)
 
-    d_ttl_dds = moninj.MonInj()
+    d_ttl_dds = moninj.MonInj(args.server, args.proxy_core_pubsub_port, args.proxy_core_rpc_port)
     loop.run_until_complete(d_ttl_dds.start(args.server, args.port_notify))
     atexit_register_coroutine(d_ttl_dds.stop)
 
