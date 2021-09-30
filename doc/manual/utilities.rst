@@ -131,3 +131,12 @@ DRTIO routing table manipulation tool
 .. argparse::
    :ref: artiq.frontend.artiq_route.get_argparser
    :prog: artiq_route
+
+Core device monitor-injection proxy
+------------------------------
+
+.. argparse::
+   :ref: artiq.frontend.aqctl_proxy_moninj.get_argparser
+   :prog: aqctl_proxy_moninj
+
+.. _core-device-moninj-proxy:

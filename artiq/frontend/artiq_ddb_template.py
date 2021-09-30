@@ -36,6 +36,14 @@ def process_header(output, description):
                 "port": 1068,
                 "command": "aqctl_corelog -p {{port}} --bind {{bind}} " + core_addr
             }},
+            "moninj": {{
+                "type": "controller",
+                "host": "{moninj_host}",
+                "master_addr": "{master_addr}",
+                "rpc_port": "{rpc_port}",
+                "pubsub_port": "{pubsub_port}",
+                "command": "artiq_proxy_moninj -s {{master_addr}} --proxy-core-rpc {{rpc_port}} --proxy-core-pubsub {{pubsub_port}} --bind {{host}}"
+            }},
             "core_cache": {{
                 "type": "local",
                 "module": "artiq.coredevice.cache",
@@ -64,7 +72,12 @@ def process_header(output, description):
             variant=description["variant"],
             core_addr=description["core_addr"],
             ref_period=1/(8*description["rtio_frequency"]),
-            cpu_target=cpu_target),
+            cpu_target=cpu_target,
+            master_addr=description["moninj"]["master_addr"],
+            moninj_host=description["moninj"]["host"],
+            pubsub_port=description["moninj"]["pubsub_port"],
+            rpc_port=description["moninj"]["rpc_port"]
+        ),
         file=output)
 
 

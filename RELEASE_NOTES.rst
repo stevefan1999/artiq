@@ -24,6 +24,8 @@ Highlights:
    - HVAMP_8CH 8 channel HV amplifier for Fastino / Zotino
 * ``artiq_ddb_template`` generates edge-counter keys that start with the key of the corresponding
   TTL device (e.g. ``"ttl_0_counter"`` for the edge counter on TTL device``"ttl_0"``)
+* Preliminary moninj proxying support with ``aqctl_proxy_moninj`` for dashboard to connect to
+  core device for moninj indirectly.
 
 Breaking changes:
 
