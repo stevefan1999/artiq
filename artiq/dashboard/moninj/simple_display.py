@@ -2,7 +2,7 @@ from PyQt5 import QtWidgets, QtCore
 
 
 class SimpleDisplayWidget(QtWidgets.QFrame):
-    def __init__(self, title: str):
+    def __init__(self, title):
         QtWidgets.QFrame.__init__(self)
 
         grid = QtWidgets.QGridLayout()

@@ -1,9 +1,6 @@
 import asyncio
 import logging
-import typing
-from typing import Optional
 
-from PyQt5.QtWidgets import QMessageBox
 from sipyco.pc_rpc import AsyncioClient
 from sipyco.sync_struct import Subscriber
 
@@ -12,26 +9,21 @@ from artiq.dashboard.moninj.util import setup_from_ddb
 from artiq.dashboard.moninj.widgets.dac import DACWidget
 from artiq.dashboard.moninj.widgets.dds import DDSWidget
 from artiq.dashboard.moninj.widgets.ttl import TTLWidget
-from artiq.tools import logger
-
-if typing.TYPE_CHECKING:
-    from artiq.master.device_manager_proxy import DeviceManagerProxy
 
 logger = logging.getLogger(__name__)
 
 
 class DeviceManager:
-    def __init__(self, server, proxy_core_pubsub_port, proxy_core_rpc_port):
+    def __init__(self):
         self._backstore = dict()
-        self.core_addr: Optional[str] = None
         self.reconnect_core = asyncio.Event()
-        self.core_connection_pubsub: Optional[Subscriber] = None
-        self.core_connection_rpc: Optional[typing.Union[AsyncioClient, DeviceManagerProxy]] = None
-        self.core_connector_task = asyncio.ensure_future(self.core_connector())
+        self.proxy_moninj_server = None
+        self.proxy_moninj_pubsub_port = None
+        self.proxy_moninj_rpc_port = None
 
-        self.server = server
-        self.proxy_core_pubsub_port = proxy_core_pubsub_port
-        self.proxy_core_rpc_port = proxy_core_rpc_port
+        self.moninj_connection_pubsub = None
+        self.moninj_connection_rpc = None
+        self.moninj_connector_task = asyncio.ensure_future(self.moninj_connector())
 
         self.ddb = dict()
         self.description = set()
@@ -50,13 +42,15 @@ class DeviceManager:
         return ddb
 
     async def notify(self, _mod):
-        core_addr, dds_sysclk, description = setup_from_ddb(self.ddb)
-
-        if core_addr != self.core_addr:
-            self.core_addr = core_addr
-            self.reconnect_core.set()
-
+        proxy_moninj_server, proxy_moninj_pubsub_port, proxy_moninj_rpc_port, dds_sysclk, description = \
+            setup_from_ddb(self.ddb)
         self.dds_sysclk = dds_sysclk if dds_sysclk else 0
+
+        if proxy_moninj_server != self.proxy_moninj_server:
+            self.proxy_moninj_server = proxy_moninj_server
+            self.proxy_moninj_pubsub_port = proxy_moninj_pubsub_port
+            self.proxy_moninj_rpc_port = proxy_moninj_rpc_port
+            self.reconnect_core.set()
 
         for to_remove in self.description - description:
             widget = self.widgets_by_uid[to_remove.uid]
@@ -104,47 +98,47 @@ class DeviceManager:
         self.description = description
 
     async def ttl_set_mode(self, channel, mode):
-        if self.core_connection_rpc is not None:
+        if self.moninj_connection_rpc is not None:
             widget = self.ttl_widgets[channel]
             if mode == "0":
                 widget.cur_override = True
                 widget.cur_level = False
 
-                await self.core_connection_rpc.inject(channel, TTLOverride.level.value, 0)
-                await self.core_connection_rpc.inject(channel, TTLOverride.oe.value, 1)
-                await self.core_connection_rpc.inject(channel, TTLOverride.en.value, 1)
+                await self.moninj_connection_rpc.inject(channel, TTLOverride.level.value, 0)
+                await self.moninj_connection_rpc.inject(channel, TTLOverride.oe.value, 1)
+                await self.moninj_connection_rpc.inject(channel, TTLOverride.en.value, 1)
             elif mode == "1":
                 widget.cur_override = True
                 widget.cur_level = True
-                await self.core_connection_rpc.inject(channel, TTLOverride.level.value, 1)
-                await self.core_connection_rpc.inject(channel, TTLOverride.oe.value, 1)
-                await self.core_connection_rpc.inject(channel, TTLOverride.en.value, 1)
+                await self.moninj_connection_rpc.inject(channel, TTLOverride.level.value, 1)
+                await self.moninj_connection_rpc.inject(channel, TTLOverride.oe.value, 1)
+                await self.moninj_connection_rpc.inject(channel, TTLOverride.en.value, 1)
             elif mode == "exp":
                 widget.cur_override = False
-                await self.core_connection_rpc.inject(channel, TTLOverride.en.value, 0)
+                await self.moninj_connection_rpc.inject(channel, TTLOverride.en.value, 0)
             else:
                 raise ValueError
             # override state may have changed
             widget.refresh_display()
 
-    async def setup_ttl_monitoring(self, enable: bool, channel: int):
-        if self.core_connection_rpc is not None:
-            await self.core_connection_rpc.monitor_probe(enable, channel, TTLProbe.level.value)
-            await self.core_connection_rpc.monitor_probe(enable, channel, TTLProbe.oe.value)
-            await self.core_connection_rpc.monitor_injection(enable, channel, TTLOverride.en.value)
-            await self.core_connection_rpc.monitor_injection(enable, channel, TTLOverride.level.value)
+    async def setup_ttl_monitoring(self, enable, channel):
+        if self.moninj_connection_rpc is not None:
+            await self.moninj_connection_rpc.monitor_probe(enable, channel, TTLProbe.level.value)
+            await self.moninj_connection_rpc.monitor_probe(enable, channel, TTLProbe.oe.value)
+            await self.moninj_connection_rpc.monitor_injection(enable, channel, TTLOverride.en.value)
+            await self.moninj_connection_rpc.monitor_injection(enable, channel, TTLOverride.level.value)
             if enable:
-                await self.core_connection_rpc.get_injection_status(channel, TTLOverride.en.value)
+                await self.moninj_connection_rpc.get_injection_status(channel, TTLOverride.en.value)
 
-    async def setup_dds_monitoring(self, enable: bool, bus_channel: int, channel: int):
-        if self.core_connection_rpc is not None:
-            await self.core_connection_rpc.monitor_probe(enable, bus_channel, channel)
+    async def setup_dds_monitoring(self, enable, bus_channel, channel):
+        if self.moninj_connection_rpc is not None:
+            await self.moninj_connection_rpc.monitor_probe(enable, bus_channel, channel)
 
-    async def setup_dac_monitoring(self, enable: bool, spi_channel: int, channel: int):
-        if self.core_connection_rpc is not None:
-            await self.core_connection_rpc.monitor_probe(enable, spi_channel, channel)
+    async def setup_dac_monitoring(self, enable, spi_channel, channel):
+        if self.moninj_connection_rpc is not None:
+            await self.moninj_connection_rpc.monitor_probe(enable, spi_channel, channel)
 
-    def monitor_cb(self, channel: int, probe: int, value: int):
+    def monitor_cb(self, channel, probe, value):
         if channel in self.ttl_widgets:
             widget = self.ttl_widgets[channel]
             if probe == TTLProbe.level.value:
@@ -161,7 +155,7 @@ class DeviceManager:
             widget.cur_value = value
             widget.refresh_display()
 
-    def injection_status_cb(self, channel: int, override: int, value: int):
+    def injection_status_cb(self, channel, override, value):
         if channel in self.ttl_widgets:
             widget = self.ttl_widgets[channel]
             if override == TTLOverride.en.value:
@@ -197,26 +191,21 @@ class DeviceManager:
         if 'path' in mod and 'disconnect' in mod["path"]:
             self.disconnect_cb()
 
-    def on_disconnect(self):
-        msgbox = QMessageBox()
-        msgbox.setText("Lost connection to master!")
-        msgbox.setDefaultButton(QMessageBox.Yes)
-        msgbox.exec()
-
-    async def core_connector(self):
+    async def moninj_connector(self):
         while True:
             await self.reconnect_core.wait()
             self.reconnect_core.clear()
             await self.ensure_connection_closed()
-            self.core_connection_pubsub = None
-            self.core_connection_rpc = None
+            self.moninj_connection_pubsub = None
+            self.moninj_connection_rpc = None
 
-            new_core_pubsub = Subscriber("coredevice", target_builder=self.replay_snapshots, notify_cb=self.on_notify,
-                                         disconnect_cb=self.on_disconnect)
-            new_core_rpc = AsyncioClient()
+            new_moninj_pubsub = Subscriber("coredevice", target_builder=self.replay_snapshots, notify_cb=self.on_notify,
+                                           disconnect_cb=self.disconnect_cb)
+            new_moninj_rpc = AsyncioClient()
             try:
-                await new_core_pubsub.connect(self.server, self.proxy_core_pubsub_port)
-                await new_core_rpc.connect_rpc(self.server, self.proxy_core_rpc_port, target_name="proxy")
+                await new_moninj_pubsub.connect(self.proxy_moninj_server, self.proxy_moninj_pubsub_port)
+                await new_moninj_rpc.connect_rpc(self.proxy_moninj_server, self.proxy_moninj_rpc_port,
+                                                 target_name="proxy")
             except asyncio.CancelledError:
                 logger.info("cancelled connection to core device moninj")
                 break
@@ -226,8 +215,8 @@ class DeviceManager:
                 self.reconnect_core.set()
                 return False
             else:
-                self.core_connection_pubsub = new_core_pubsub
-                self.core_connection_rpc = new_core_rpc
+                self.moninj_connection_pubsub = new_moninj_pubsub
+                self.moninj_connection_rpc = new_moninj_rpc
                 for ttl_channel in self.ttl_widgets.keys():
                     await self.setup_ttl_monitoring(True, ttl_channel)
                 for bus_channel, channel in self.dds_widgets.keys():
@@ -236,15 +225,15 @@ class DeviceManager:
                     await self.setup_dac_monitoring(True, spi_channel, channel)
 
     async def close(self):
-        self.core_connector_task.cancel()
+        self.moninj_connector_task.cancel()
         try:
-            await asyncio.wait_for(self.core_connector_task, None)
+            await asyncio.wait_for(self.moninj_connector_task, None)
         except asyncio.CancelledError:
             pass
         await self.ensure_connection_closed()
 
     async def ensure_connection_closed(self):
-        if self.core_connection_pubsub is not None:
-            await self.core_connection_pubsub.close()
-        if self.core_connection_rpc is not None:
-            await self.core_connection_rpc.close()
+        if self.moninj_connection_pubsub is not None:
+            await self.moninj_connection_pubsub.close()
+        if self.moninj_connection_rpc is not None:
+            await self.moninj_connection_rpc.close()
