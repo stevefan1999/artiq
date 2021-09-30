@@ -5,12 +5,12 @@ from artiq.dashboard.moninj.widgets.moninj_dock import MonInjDock
 
 
 class MonInj:
-    def __init__(self, server, proxy_core_pubsub_port, proxy_core_rpc_port):
+    def __init__(self):
         self.ttl_dock = MonInjDock("TTL")
         self.dds_dock = MonInjDock("DDS")
         self.dac_dock = MonInjDock("DAC")
 
-        self.dm = DeviceManager(server, proxy_core_pubsub_port, proxy_core_rpc_port)
+        self.dm = DeviceManager()
         self.dm.ttl_cb = lambda: self.ttl_dock.layout_widgets(
             self.dm.ttl_widgets.values())
         self.dm.dds_cb = lambda: self.dds_dock.layout_widgets(

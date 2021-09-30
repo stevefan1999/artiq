@@ -1,12 +1,8 @@
 from artiq.dashboard.moninj.simple_display import SimpleDisplayWidget
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from artiq.dashboard.moninj.device_manager import DeviceManager
 
 
 class DACWidget(SimpleDisplayWidget):
-    def __init__(self, dm: "DeviceManager", spi_channel: int, channel: int, title: str):
+    def __init__(self, dm, spi_channel, channel, title):
         self.spi_channel = spi_channel
         self.channel = channel
         self.cur_value = 0

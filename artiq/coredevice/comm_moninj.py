@@ -3,9 +3,7 @@ import logging
 import struct
 from enum import Enum
 
-
 __all__ = ["TTLProbe", "TTLOverride", "CommMonInj"]
-
 
 logger = logging.getLogger(__name__)
 

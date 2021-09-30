@@ -5,7 +5,6 @@ import asyncio
 import atexit
 import os
 import logging
-import sys
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 from qasync import QEventLoop
