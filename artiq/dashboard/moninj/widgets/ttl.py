@@ -1,16 +1,12 @@
 import asyncio
-from typing import TYPE_CHECKING
 
 from PyQt5 import QtWidgets, QtCore
 
 from artiq.gui.tools import LayoutWidget
 
-if TYPE_CHECKING:
-    from artiq.dashboard.moninj.device_manager import DeviceManager
-
 
 class TTLWidget(QtWidgets.QFrame):
-    def __init__(self, dm: "DeviceManager", channel: int, force_out: bool, title: str):
+    def __init__(self, dm, channel, force_out, title):
         QtWidgets.QFrame.__init__(self)
 
         self.channel = channel
