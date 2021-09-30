@@ -123,7 +123,6 @@ class _DeviceManager:
 
         self.ddb = dict()
         self.description = set()
-        self.widgets_by_uid = dict()
 
         self.dds_sysclk = 0
         self.docks = dict()
