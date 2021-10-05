@@ -1,6 +1,7 @@
 import asyncio
 import logging
 
+from itertools import chain
 from sipyco.pc_rpc import AsyncioClient
 from sipyco.sync_struct import Subscriber
 
@@ -191,6 +192,11 @@ class DeviceManager:
         if 'path' in mod and 'disconnect' in mod["path"]:
             self.disconnect_cb()
 
+    def control_widgets(self, enabled):
+        for widget in chain(self.dds_widgets.values(), self.ttl_widgets.values(), self.dac_widgets.values()):
+            widget.setEnabled(enabled)
+            widget.refresh_display()
+
     async def moninj_connector(self):
         while True:
             await self.reconnect_core.wait()
@@ -198,7 +204,10 @@ class DeviceManager:
             await self.ensure_connection_closed()
             self.moninj_connection_pubsub = None
             self.moninj_connection_rpc = None
-
+            self.control_widgets(enabled=False)
+            # if there is no moninj server defined, just stop connecting
+            if self.proxy_moninj_server is None:
+                continue
             new_moninj_pubsub = Subscriber("coredevice", target_builder=self.replay_snapshots, notify_cb=self.on_notify,
                                            disconnect_cb=self.disconnect_cb)
             new_moninj_rpc = AsyncioClient()
@@ -223,6 +232,7 @@ class DeviceManager:
                     await self.setup_dds_monitoring(True, bus_channel, channel)
                 for spi_channel, channel in self.dac_widgets.keys():
                     await self.setup_dac_monitoring(True, spi_channel, channel)
+                self.control_widgets(enabled=True)
 
     async def close(self):
         self.moninj_connector_task.cancel()
