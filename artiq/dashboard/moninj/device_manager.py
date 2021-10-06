@@ -14,6 +14,12 @@ from artiq.dashboard.moninj.widgets.ttl import TTLWidget
 logger = logging.getLogger(__name__)
 
 
+class Layout:
+    def __init__(self, setup_layout=lambda x: None):
+        self.setup_layout = setup_layout
+        self.widgets = dict()
+
+
 class DeviceManager:
     def __init__(self):
         self._backstore = dict()
@@ -31,12 +37,11 @@ class DeviceManager:
         self.widgets_by_uid = dict()
 
         self.dds_sysclk = 0
-        self.ttl_cb = lambda: None
-        self.ttl_widgets = dict()
-        self.dds_cb = lambda: None
-        self.dds_widgets = dict()
-        self.dac_cb = lambda: None
-        self.dac_widgets = dict()
+        self.docks = {
+            "TTL": Layout(),
+            "DDS": Layout(),
+            "DAC": Layout()
+        }
 
     def init_ddb(self, ddb):
         self.ddb = ddb
@@ -53,6 +58,9 @@ class DeviceManager:
             self.proxy_moninj_rpc_port = proxy_moninj_rpc_port
             self.reconnect_core.set()
 
+        dac = self.docks["DAC"]
+        dds = self.docks["DDS"]
+        ttl = self.docks["TTL"]
         for to_remove in self.description - description:
             widget = self.widgets_by_uid[to_remove.uid]
             del self.widgets_by_uid[to_remove.uid]
@@ -60,18 +68,18 @@ class DeviceManager:
             if isinstance(widget, TTLWidget):
                 await self.setup_ttl_monitoring(False, widget.channel)
                 widget.deleteLater()
-                del self.ttl_widgets[widget.channel]
-                self.ttl_cb()
+                del ttl.widgets[widget.channel]
+                ttl.setup_layout(ttl.widgets.values())
             elif isinstance(widget, DDSWidget):
                 await self.setup_dds_monitoring(False, widget.bus_channel, widget.channel)
                 widget.deleteLater()
-                del self.dds_widgets[(widget.bus_channel, widget.channel)]
-                self.dds_cb()
+                del dds.widgets[(widget.bus_channel, widget.channel)]
+                dds.setup_layout(dds.widgets.values())
             elif isinstance(widget, DACWidget):
                 await self.setup_dac_monitoring(False, widget.spi_channel, widget.channel)
                 widget.deleteLater()
-                del self.dac_widgets[(widget.spi_channel, widget.channel)]
-                self.dac_cb()
+                del dac.widgets[(widget.spi_channel, widget.channel)]
+                dac.setup_layout(dac.widgets.values())
             else:
                 raise ValueError
 
@@ -82,16 +90,16 @@ class DeviceManager:
             self.widgets_by_uid[to_add.uid] = widget
 
             if isinstance(widget, TTLWidget):
-                self.ttl_widgets[widget.channel] = widget
-                self.ttl_cb()
+                ttl.widgets[widget.channel] = widget
+                ttl.setup_layout(ttl.widgets.values())
                 await self.setup_ttl_monitoring(True, widget.channel)
             elif isinstance(widget, DDSWidget):
-                self.dds_widgets[(widget.bus_channel, widget.channel)] = widget
-                self.dds_cb()
+                dds.widgets[(widget.bus_channel, widget.channel)] = widget
+                dds.setup_layout(dds.widgets.values())
                 await self.setup_dds_monitoring(True, widget.bus_channel, widget.channel)
             elif isinstance(widget, DACWidget):
-                self.dac_widgets[(widget.spi_channel, widget.channel)] = widget
-                self.dac_cb()
+                dac.widgets[(widget.spi_channel, widget.channel)] = widget
+                dac.setup_layout(dac.widgets.values())
                 await self.setup_dac_monitoring(True, widget.spi_channel, widget.channel)
             else:
                 raise ValueError
@@ -100,7 +108,7 @@ class DeviceManager:
 
     async def ttl_set_mode(self, channel, mode):
         if self.moninj_connection_rpc is not None:
-            widget = self.ttl_widgets[channel]
+            widget = self.docks["TTL"].widgets[channel]
             if mode == "0":
                 widget.cur_override = True
                 widget.cur_level = False
@@ -140,25 +148,29 @@ class DeviceManager:
             await self.moninj_connection_rpc.monitor_probe(enable, spi_channel, channel)
 
     def monitor_cb(self, channel, probe, value):
-        if channel in self.ttl_widgets:
-            widget = self.ttl_widgets[channel]
+        ttl = self.docks["TTL"]
+        dds = self.docks["DDS"]
+        dac = self.docks["DAC"]
+        if channel in ttl.widgets:
+            widget = ttl.widgets[channel]
             if probe == TTLProbe.level.value:
                 widget.cur_level = bool(value)
             elif probe == TTLProbe.oe.value:
                 widget.cur_oe = bool(value)
             widget.refresh_display()
-        if (channel, probe) in self.dds_widgets:
-            widget = self.dds_widgets[(channel, probe)]
+        if (channel, probe) in dds.widgets:
+            widget = dds.widgets[(channel, probe)]
             widget.cur_frequency = value * self.dds_sysclk / 2 ** 32
             widget.refresh_display()
-        if (channel, probe) in self.dac_widgets:
-            widget = self.dac_widgets[(channel, probe)]
+        if (channel, probe) in dac.widgets:
+            widget = dac.widgets[(channel, probe)]
             widget.cur_value = value
             widget.refresh_display()
 
     def injection_status_cb(self, channel, override, value):
-        if channel in self.ttl_widgets:
-            widget = self.ttl_widgets[channel]
+        ttl = self.docks["TTL"]
+        if channel in ttl.widgets:
+            widget = ttl.widgets[channel]
             if override == TTLOverride.en.value:
                 widget.cur_override = bool(value)
             if override == TTLOverride.level.value:
@@ -193,7 +205,7 @@ class DeviceManager:
             self.disconnect_cb()
 
     def control_widgets(self, enabled):
-        for widget in chain(self.dds_widgets.values(), self.ttl_widgets.values(), self.dac_widgets.values()):
+        for widget in chain(*[x.widgets.values() for x in self.docks.values()]):
             widget.setEnabled(enabled)
             widget.refresh_display()
 
@@ -225,11 +237,11 @@ class DeviceManager:
             else:
                 self.moninj_connection_pubsub = new_moninj_pubsub
                 self.moninj_connection_rpc = new_moninj_rpc
-                for ttl_channel in self.ttl_widgets.keys():
+                for ttl_channel in self.docks["TTL"].widgets.keys():
                     await self.setup_ttl_monitoring(True, ttl_channel)
-                for bus_channel, channel in self.dds_widgets.keys():
+                for bus_channel, channel in self.docks["DDS"].widgets.keys():
                     await self.setup_dds_monitoring(True, bus_channel, channel)
-                for spi_channel, channel in self.dac_widgets.keys():
+                for spi_channel, channel in self.docks["DAC"].widgets.keys():
                     await self.setup_dac_monitoring(True, spi_channel, channel)
                 self.control_widgets(enabled=True)
 

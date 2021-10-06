@@ -1,6 +1,6 @@
 from sipyco.sync_struct import Subscriber
 
-from artiq.dashboard.moninj.device_manager import DeviceManager
+from artiq.dashboard.moninj.device_manager import DeviceManager, Layout
 from artiq.dashboard.moninj.widgets.moninj_dock import MonInjDock
 
 
@@ -11,12 +11,11 @@ class MonInj:
         self.dac_dock = MonInjDock("DAC")
 
         self.dm = DeviceManager()
-        self.dm.ttl_cb = lambda: self.ttl_dock.layout_widgets(
-            self.dm.ttl_widgets.values())
-        self.dm.dds_cb = lambda: self.dds_dock.layout_widgets(
-            self.dm.dds_widgets.values())
-        self.dm.dac_cb = lambda: self.dac_dock.layout_widgets(
-            self.dm.dac_widgets.values())
+        self.dm.docks.update({
+            "TTL": Layout(lambda x: self.ttl_dock.layout_widgets(x)),
+            "DDS": Layout(lambda x: self.dds_dock.layout_widgets(x)),
+            "DAC": Layout(lambda x: self.dac_dock.layout_widgets(x))
+        })
 
         self.subscriber = Subscriber("devices", self.dm.init_ddb, self.dm.notify)
 
