@@ -26,6 +26,8 @@ Highlights:
   TTL device (e.g. ``"ttl_0_counter"`` for the edge counter on TTL device``"ttl_0"``)
 * Preliminary moninj proxying support with ``aqctl_proxy_moninj`` for dashboard to connect to
   core device for moninj indirectly.
+* Dashboard now uses a proxy reach core device MonInj indirectly, as opposed to directly connecting
+  to core device before
 
 Breaking changes:
 
