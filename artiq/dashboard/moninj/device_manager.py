@@ -201,7 +201,7 @@ class DeviceManager:
         while True:
             await self.reconnect_core.wait()
             self.reconnect_core.clear()
-            await self.ensure_connection_closed()
+            asyncio.ensure_future(self.ensure_connection_closed())
             self.moninj_connection_pubsub = None
             self.moninj_connection_rpc = None
             self.control_widgets(enabled=False)
@@ -222,7 +222,6 @@ class DeviceManager:
                 logger.error("failed to connect to core device moninj", exc_info=True)
                 await asyncio.sleep(10.)
                 self.reconnect_core.set()
-                return False
             else:
                 self.moninj_connection_pubsub = new_moninj_pubsub
                 self.moninj_connection_rpc = new_moninj_rpc
@@ -240,10 +239,10 @@ class DeviceManager:
             await asyncio.wait_for(self.moninj_connector_task, None)
         except asyncio.CancelledError:
             pass
-        await self.ensure_connection_closed()
+        asyncio.ensure_future(self.ensure_connection_closed())
 
     async def ensure_connection_closed(self):
         if self.moninj_connection_pubsub is not None:
-            await self.moninj_connection_pubsub.close()
+            asyncio.ensure_future(self.moninj_connection_pubsub.close())
         if self.moninj_connection_rpc is not None:
-            await self.moninj_connection_rpc.close()
+            asyncio.ensure_future(self.moninj_connection_rpc.close())
