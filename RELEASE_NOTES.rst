@@ -26,6 +26,8 @@ Highlights:
   TTL device (e.g. ``"ttl_0_counter"`` for the edge counter on TTL device``"ttl_0"``)
 * ``artiq_master`` now has an ``--experiment-subdir`` option to scan only a subdirectory of the
   repository when building the list of experiments.
+* The configuration entry ``rtio_clock`` supports multiple clocking settings, deprecating the usage
+  of compile-time options.
 
 Breaking changes:
 
@@ -36,7 +38,12 @@ Breaking changes:
 * Phaser: fixed coarse mixer frequency configuration
 * Mirny: Added extra delays in ``ADF5356.sync()``. This avoids the need of an extra delay before
   calling `ADF5356.init()`.
-
+* Dashboard now uses a proxy reach core device MonInj indirectly, as opposed to directly connecting
+  to core device before:
+    - This means you need to regenerate your device database for master to publish the moninj proxy
+      connection information to the dashboard
+* Dashboard will retry when it disconnected with the master and core device, and will block the widgets
+  until connection is re-established. (you will need to close the dashboard and start again previously)
 
 ARTIQ-6
 -------
