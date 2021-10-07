@@ -92,11 +92,10 @@ class TTLWidget(QtWidgets.QFrame):
     async def level_toggled(self, level):
         if self.programmatic_change:
             return
-        if self.override.isChecked():
-            if level:
-                await self.set_mode(self.channel, "1")
-            else:
-                await self.set_mode(self.channel, "0")
+        if level:
+            await self.set_mode(self.channel, "1")
+        else:
+            await self.set_mode(self.channel, "0")
 
     def refresh_display(self):
         level = self.cur_override_level if self.cur_override else self.cur_level
