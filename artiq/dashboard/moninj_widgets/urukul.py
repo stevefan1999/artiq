@@ -2,15 +2,31 @@ import asyncio
 
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QFrame, QLabel, QGridLayout, QSizePolicy, QStackedWidget, QToolButton, QLineEdit
-from artiq.language.units import MHz
-from numpy import int32, int64
+from numpy import int64
 
-from artiq.coredevice import urukul
 from artiq.coredevice.ad9910 import AD9910_REG_PROFILE0, AD9910_REG_PROFILE7, AD9910_REG_FTW, AD9910_REG_ASF
 from artiq.coredevice.ad9912_reg import AD9912_POW1
 from artiq.gui.tools import LayoutWidget
+from artiq.language.environment import ProcessArgumentManager
+from artiq.language.units import MHz
+from artiq.master import worker_db
+from artiq.dashboard.moninj.widgets.experiments.urukul_freq_set import UrukulFreqSet
 
-from artiq.coredevice.spi2 import SPI_END
+
+
+class LocalDeviceDB:
+    def __init__(self, data):
+        self.data = data
+
+    def get_device_db(self):
+        return self.data
+
+    def get(self, key, resolve_alias=False):
+        desc = self.data[key]
+        if resolve_alias:
+            while isinstance(desc, str):
+                desc = self.data[desc]
+        return desc
 
 
 class UrukulWidget(QFrame):
@@ -25,6 +41,7 @@ QLineEdit[enable="false"] {
 
         self.bus_channel = bus_channel
         self.channel = channel
+        self.worker_dm = worker_db.DeviceManager(LocalDeviceDB(dm.ddb))
         self.set_on_off = dm.ttl_set_mode  # todo
         self.urukul_set_override = dm.urukul_set_override
         self.urukul_write = dm.urukul_write
@@ -81,11 +98,11 @@ QLineEdit[enable="false"] {
         # self.freq_label.setSizePolicy(QtWidgets.QSizePolicy.Ignored,
         #                               QtWidgets.QSizePolicy.Preferred)
         self.freq_stack.addWidget(self.freq_label)
-        self.freq_edit = QLabel()
+        self.freq_edit = QLineEdit()
         self.freq_edit.setAlignment(Qt.AlignCenter)
         # self.freq_edit.setInputMask("0.0000")
-        # self.freq_edit.setReadOnly(True)
-        # self.freq_edit.setEnabled(False)
+        self.freq_edit.setReadOnly(True)
+        self.freq_edit.setEnabled(False)
         # self.freq_edit.setTextMargins(0, 0, 0, 0)
         self.freq_edit.setSizePolicy(QSizePolicy.Ignored,
                                      QSizePolicy.Preferred)
@@ -107,7 +124,7 @@ QLineEdit[enable="false"] {
         self.programmatic_change = False
         self.override.clicked.connect(lambda override: asyncio.ensure_future(self.override_toggled(override)))
         self.level.clicked.connect(lambda toggled: asyncio.ensure_future(self.level_toggled(toggled)))
-        # self.freq_edit.returnPressed.connect(lambda: asyncio.ensure_future(self.frequency_edited()))
+        self.freq_edit.returnPressed.connect(lambda: asyncio.ensure_future(self.frequency_edited()))
 
         self.cur_level = False
         self.cur_override = False
@@ -137,8 +154,8 @@ QLineEdit[enable="false"] {
         if self.programmatic_change:
             return
         await self.urukul_set_override(self.bus_channel, override)
-        # self.freq_edit.setReadOnly(not override)
-        # self.freq_edit.setEnabled(override)
+        self.freq_edit.setReadOnly(not override)
+        self.freq_edit.setEnabled(override)
         if override:
             if self.level.isChecked():
                 await self.set_on_off(self.sw_channel, "1")
@@ -146,6 +163,7 @@ QLineEdit[enable="false"] {
                 await self.set_on_off(self.sw_channel, "0")
         else:
             await self.set_on_off(self.sw_channel, "exp")
+        self.cur_override_level = override
 
     async def level_toggled(self, level):
         if self.programmatic_change:
@@ -190,27 +208,19 @@ QLineEdit[enable="false"] {
         freq = float(self.freq_edit.text()) * MHz
         self.cur_frequency = freq
         print("frequency edited: ", freq)
-        await self.urukul_write(self.bus_channel, True,
-                          self._get_cfg_word(urukul.SPI_CONFIG, 8, urukul.SPIT_DDS_WR, self.channel + 4))
-        await self.urukul_write(self.bus_channel, False, AD9910_REG_FTW() << 24)
-        await self.urukul_write(self.bus_channel, True,
-                          self._get_cfg_word(urukul.SPI_CONFIG | SPI_END, 32, urukul.SPIT_DDS_WR, self.channel + 4))
-        await self.urukul_write(self.bus_channel, False, self._freq_to_ftw(freq))
 
-    def _get_cfg_word(self, flags, length, div, cs):
-        return int32(flags | ((length - 1) << 8) | ((div - 2) << 16) | (cs << 24))
+        args = {"chan": self.title, 'freq': freq}
+        argument_mgr = ProcessArgumentManager(args)
+        experiment = UrukulFreqSet((self.worker_dm, None, argument_mgr, None))
+        experiment.prepare()
+        experiment.run()
 
     def _ftw_to_freq(self, ftw):
         return ftw / self.ftw_per_hz
 
-    def _freq_to_ftw(self, freq):
-        return int32(freq * self.ftw_per_hz)
-
-    def _asf_to_amp(self, asf):
+    @staticmethod
+    def _asf_to_amp(asf):
         return asf / float(0x3ffe)  # coredevice.ad9912 doesn't allow amplitude control so only need to worry about 9910
-
-    def _amp_to_asf(self, amp):
-        return int32(amp * float(0x3ffe))
 
     def refresh_display(self):
         print(self.cur_reg, self.cur_frequency, self.cur_amp)
