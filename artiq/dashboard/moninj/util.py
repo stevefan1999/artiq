@@ -51,3 +51,11 @@ def setup_from_ddb(ddb):
 
 
 WidgetDesc = namedtuple("WidgetDesc", "uid comment cls arguments")
+
+
+def _when_value_is_instance(table, value):
+    for (type_, fn) in table.items():
+        if isinstance(value, type_):
+            return fn(value)
+    else:
+        raise ValueError

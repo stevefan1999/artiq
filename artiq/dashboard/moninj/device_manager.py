@@ -1,4 +1,5 @@
 import asyncio
+import collections
 import logging
 
 from itertools import chain
@@ -6,7 +7,7 @@ from sipyco.pc_rpc import AsyncioClient
 from sipyco.sync_struct import Subscriber
 
 from artiq.coredevice.comm_moninj import TTLOverride, TTLProbe
-from artiq.dashboard.moninj.util import setup_from_ddb
+from artiq.dashboard.moninj.util import setup_from_ddb, _when_value_is_instance
 from artiq.dashboard.moninj.widgets.dac import DACWidget
 from artiq.dashboard.moninj.widgets.dds import DDSWidget
 from artiq.dashboard.moninj.widgets.ttl import TTLWidget
@@ -18,6 +19,17 @@ class Layout:
     def __init__(self, setup_layout=lambda x: None):
         self.setup_layout = setup_layout
         self.widgets = dict()
+
+    def refresh_layout(self):
+        self.setup_layout(self.widgets.values())
+
+    def remove_widget(self, key):
+        del self.widgets[key]
+        self.refresh_layout()
+
+    def add_widget(self, chan, widget):
+        self.widgets[chan] = widget
+        self.refresh_layout()
 
 
 class DeviceManager:
@@ -37,11 +49,7 @@ class DeviceManager:
         self.widgets_by_uid = dict()
 
         self.dds_sysclk = 0
-        self.docks = {
-            "TTL": Layout(),
-            "DDS": Layout(),
-            "DAC": Layout()
-        }
+        self.docks = collections.defaultdict(Layout)
 
     def init_ddb(self, ddb):
         self.ddb = ddb
@@ -57,54 +65,56 @@ class DeviceManager:
             self.proxy_moninj_pubsub_port = proxy_moninj_pubsub_port
             self.proxy_moninj_rpc_port = proxy_moninj_rpc_port
             self.reconnect_core.set()
+        await self._add_widgets(description - self.description)
+        await self._remove_widgets(self.description - description)
+        self.description = description
 
-        dac = self.docks["DAC"]
-        dds = self.docks["DDS"]
-        ttl = self.docks["TTL"]
-        for to_remove in self.description - description:
-            widget = self.widgets_by_uid[to_remove.uid]
-            del self.widgets_by_uid[to_remove.uid]
-
-            if isinstance(widget, TTLWidget):
-                await self.setup_ttl_monitoring(False, widget.channel)
-                widget.deleteLater()
-                del ttl.widgets[widget.channel]
-                ttl.setup_layout(ttl.widgets.values())
-            elif isinstance(widget, DDSWidget):
-                await self.setup_dds_monitoring(False, widget.bus_channel, widget.channel)
-                widget.deleteLater()
-                del dds.widgets[(widget.bus_channel, widget.channel)]
-                dds.setup_layout(dds.widgets.values())
-            elif isinstance(widget, DACWidget):
-                await self.setup_dac_monitoring(False, widget.spi_channel, widget.channel)
-                widget.deleteLater()
-                del dac.widgets[(widget.spi_channel, widget.channel)]
-                dac.setup_layout(dac.widgets.values())
-            else:
-                raise ValueError
-
-        for to_add in description - self.description:
+    async def _add_widgets(self, addition):
+        for to_add in addition:
             widget = to_add.cls(self, *to_add.arguments)
-            if to_add.comment is not None:
+            if to_add.comment:
                 widget.setToolTip(to_add.comment)
             self.widgets_by_uid[to_add.uid] = widget
 
-            if isinstance(widget, TTLWidget):
-                ttl.widgets[widget.channel] = widget
-                ttl.setup_layout(ttl.widgets.values())
+            async def add_ttl(widget):
+                self.docks["TTL"].add_widget(widget.channel, widget)
                 await self.setup_ttl_monitoring(True, widget.channel)
-            elif isinstance(widget, DDSWidget):
-                dds.widgets[(widget.bus_channel, widget.channel)] = widget
-                dds.setup_layout(dds.widgets.values())
-                await self.setup_dds_monitoring(True, widget.bus_channel, widget.channel)
-            elif isinstance(widget, DACWidget):
-                dac.widgets[(widget.spi_channel, widget.channel)] = widget
-                dac.setup_layout(dac.widgets.values())
-                await self.setup_dac_monitoring(True, widget.spi_channel, widget.channel)
-            else:
-                raise ValueError
 
-        self.description = description
+            async def add_dds(widget):
+                self.docks["DDS"].add_widget((widget.bus_channel, widget.channel), widget)
+                await self.setup_dds_monitoring(True, widget.bus_channel, widget.channel)
+
+            async def add_dac(widget):
+                self.docks["DAC"].add_widget((widget.spi_channel, widget.channel), widget)
+                await self.setup_dac_monitoring(True, widget.spi_channel, widget.channel)
+
+            await _when_value_is_instance({
+                TTLWidget: add_ttl,
+                DDSWidget: add_dds,
+                DACWidget: add_dac
+            }, widget)
+
+    async def _remove_widgets(self, difference):
+        for widget in [self.widgets_by_uid.pop(widget.uid) for widget in difference]:
+            widget.deleteLater()
+
+            async def remove_ttl(widget):
+                self.docks["TTL"].remove_widget(widget.channel)
+                await self.setup_ttl_monitoring(False, widget.channel)
+
+            async def remove_dds(widget):
+                self.docks["DDS"].remove_widget((widget.bus_channel, widget.channel))
+                await self.setup_dds_monitoring(False, widget.bus_channel, widget.channel)
+
+            async def remove_dac(widget):
+                self.docks["DAC"].remove_widget((widget.spi_channel, widget.channel))
+                await self.setup_dac_monitoring(False, widget.spi_channel, widget.channel)
+
+            _when_value_is_instance({
+                TTLWidget: remove_ttl,
+                DDSWidget: remove_dds,
+                DACWidget: remove_dac
+            }, widget)
 
     async def ttl_set_mode(self, channel, mode):
         if self.moninj_connection_rpc is not None:
