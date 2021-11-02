@@ -195,14 +195,16 @@ class DeviceManager:
         target = self._backstore
 
         if mod["action"] == "setitem":
-            for key in mod["path"]:
+            path_, key_, value_ = mod["path"], mod["key"], mod["value"]
+            for key in path_:
                 target = target[key]
-            if 'injection_status' in mod["path"] and len(mod["path"]) > 1:
-                self.injection_status_cb(mod["path"][-1], mod["key"], mod["value"])
-            if 'monitor' in mod["path"] and len(mod["path"]) > 1:
-                self.monitor_cb(mod["path"][-1], mod["key"], mod["value"])
-        if 'path' in mod and 'disconnect' in mod["path"]:
-            self.disconnect_cb()
+            if 'injection_status' in path_ and len(path_) > 1:
+                self.injection_status_cb(path_[-1], key_, value_)
+            if 'monitor' in path_ and len(path_) > 1:
+                self.monitor_cb(path_[-1], key_, value_)
+            if 'connected' in path_:
+                if (key_ == 'coredev' or key_ == 'master') and not value_:
+                    self.disconnect_cb()
 
     def control_widgets(self, enabled):
         for widget in chain(*[x.widgets.values() for x in self.docks.values()]):
