@@ -7,7 +7,7 @@ import os
 import logging
 
 from PyQt5 import QtCore, QtGui, QtWidgets
-from qasync import QEventLoop
+from PyQt5.QtCore import QEventLoop
 
 from sipyco.pc_rpc import AsyncioClient, Client
 from sipyco.broadcast import Receiver

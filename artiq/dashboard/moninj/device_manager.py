@@ -222,6 +222,14 @@ class DeviceManager:
                 widget.cur_override_level = bool(value)
             widget.refresh_display()
 
+        # if (channel, probe % 4) in self.docks["Urukul"].widgets:
+        #     widget = self.urukul_widgets[(override - 1) % 4]
+        #     type = (override - 1) // 4
+        #     if type == 0:
+        #         widget.cur_override = bool(value)
+        #     elif type == 1:
+        #         widget.cur_override_
+
     def disconnect_cb(self):
         logger.error("lost connection to core device moninj")
         self.reconnect_core.set()
