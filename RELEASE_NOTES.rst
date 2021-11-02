@@ -28,6 +28,10 @@ Highlights:
   to core device before
 * Preliminary moninj proxying support with ``aqctl_proxy_moninj`` for dashboard to connect to
   core device for moninj indirectly.
+* ``artiq_master`` now has an ``--experiment-subdir`` option to scan only a subdirectory of the
+  repository when building the list of experiments.
+* The configuration entry ``rtio_clock`` supports multiple clocking settings, deprecating the usage
+  of compile-time options.
 
 Breaking changes:
 

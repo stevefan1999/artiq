@@ -42,6 +42,8 @@
         xorg.libXext
         xorg.libXtst
         xorg.libXi
+        freetype
+        fontconfig
       ];
 
       sipyco = pkgs.python3Packages.buildPythonPackage {
@@ -181,6 +183,30 @@
         propagatedBuildInputs = with pkgs.python3Packages; [ jinja2 numpy migen pyserial asyncserial ];
       };
 
+      jesd204b = pkgs.python3Packages.buildPythonPackage rec {
+        pname = "jesd204b";
+        version = "unstable-2021-05-05";
+        src = pkgs.fetchFromGitHub {
+          owner = "m-labs";
+          repo = "jesd204b";
+          rev = "bf1cd9014c8b7a9db67609f653634daaf3bcd39b";
+          sha256 = "sha256-wyYOCRIPANReeCl+KaIpiAStsn2mzfMlK+cSrUzVrAw=";
+        };
+        propagatedBuildInputs = with pkgs.python3Packages; [ migen misoc ];
+      };
+
+      microscope = pkgs.python3Packages.buildPythonPackage rec {
+        pname = "microscope";
+        version = "unstable-2020-12-28";
+        src = pkgs.fetchFromGitHub {
+          owner = "m-labs";
+          repo = "microscope";
+          rev = "c21afe7a53258f05bde57e5ebf2e2761f3d495e4";
+          sha256 = "sha256-jzyiLRuEf7p8LdhmZvOQj/dyQx8eUE8p6uRlwoiT8vg=";
+        };
+        propagatedBuildInputs = with pkgs.python3Packages; [ pyserial prettytable msgpack migen ];
+      };
+
       cargo-xbuild = rustPlatform.buildRustPackage rec {
         pname = "cargo-xbuild";
         version = "0.6.5";
@@ -203,7 +229,7 @@
       vivado = pkgs.buildFHSUserEnv {
         name = "vivado";
         targetPkgs = vivadoDeps;
-        profile = "source /opt/Xilinx/Vivado/2020.1/settings64.sh";
+        profile = "source /opt/Xilinx/Vivado/2021.1/settings64.sh";
         runScript = "vivado";
       };
 
@@ -214,7 +240,7 @@
           cargoDeps = rustPlatform.fetchCargoTarball {
             name = "artiq-firmware-cargo-deps";
             src = "${self}/artiq/firmware";
-            sha256 = "0hh9x34gs81a8g15abka6a0z1wlankra13rbap5j7ba2r8cz4962";
+            sha256 = "sha256-Lf6M4M/jdRiO5MsWSoqtOSNfRIhbze+qvg4kaiiBWW4=";
           };
           nativeBuildInputs = [
             (pkgs.python3.withPackages(ps: [ migen misoc artiq ]))
@@ -236,7 +262,9 @@
             export TARGET_AR=llvm-ar
             ${buildCommand}
             '';
-          checkPhase = ''
+          doCheck = true;
+          checkPhase =
+            ''
             # Search for PCREs in the Vivado output to check for errors
             check_log() {
               grep -Pe "$1" artiq_${target}/${variant}/gateware/vivado.log && exit 1 || true
@@ -279,12 +307,21 @@
         };
         # https://docs.lambdaconcept.com/screamer/troubleshooting.html#error-contents-differ
         openocd-fixed = pkgs.openocd.overrideAttrs(oa: {
+          version = "unstable-2021-09-15";
+          src = pkgs.fetchFromGitHub {
+            owner = "openocd-org";
+            repo = "openocd";
+            rev = "a0bd3c9924870c3b8f428648410181040dabc33c";
+            sha256 = "sha256-YgUsl4/FohfsOncM4uiz/3c6g2ZN4oZ0y5vV/2Skwqg=";
+            fetchSubmodules = true;
+          };
           patches = oa.patches or [] ++ [
             (pkgs.fetchurl {
-              url = "https://docs.lambdaconcept.com/screamer/_downloads/f0357c5f44c3c8c49f575cee5b6634a8/flashid.patch";
-              sha256 = "015h4fzdrpwy5ssqbpk826snnfkkqijkmjzr5ws0a2v0ci97jzm9";
+              url = "https://git.m-labs.hk/M-Labs/nix-scripts/raw/commit/575ef05cd554c239e4cc8cb97ae4611db458a80d/artiq-fast/pkgs/openocd-jtagspi.diff";
+              sha256 = "0g3crk8gby42gm661yxdcgapdi8sp050l5pb2d0yjfic7ns9cw81";
             })
           ];
+          nativeBuildInputs = oa.nativeBuildInputs or [] ++ [ pkgs.autoreconfHook269 ];
         });
       in pkgs.buildEnv {
         name = "openocd-bscanspi";
@@ -324,7 +361,7 @@
       devShell.x86_64-linux = pkgs.mkShell {
         name = "artiq-dev-shell";
         buildInputs = [
-          (pkgs.python3.withPackages(ps: with packages.x86_64-linux; [ migen misoc artiq ps.paramiko ps.jsonschema ]))
+          (pkgs.python3.withPackages(ps: with packages.x86_64-linux; [ migen misoc jesd204b artiq ps.paramiko ps.jsonschema microscope ]))
           rustPlatform.rust.rustc
           rustPlatform.rust.cargo
           cargo-xbuild
