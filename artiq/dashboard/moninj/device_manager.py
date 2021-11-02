@@ -61,10 +61,7 @@ class DeviceManager:
         self.dds_sysclk = dds_sysclk if dds_sysclk else 0
 
         if proxy_moninj_server != self.proxy_moninj_server:
-            self.proxy_moninj_server = proxy_moninj_server
-            self.proxy_moninj_pubsub_port = proxy_moninj_pubsub_port
-            self.proxy_moninj_rpc_port = proxy_moninj_rpc_port
-            self.reconnect_core.set()
+            self._set_connection(proxy_moninj_server, proxy_moninj_pubsub_port, proxy_moninj_rpc_port)
         await self._add_widgets(description - self.description)
         await self._remove_widgets(self.description - description)
         self.description = description
@@ -225,10 +222,7 @@ class DeviceManager:
         while True:
             await self.reconnect_core.wait()
             self.reconnect_core.clear()
-            asyncio.ensure_future(self.ensure_connection_closed())
-            self.moninj_connection_pubsub = None
-            self.moninj_connection_rpc = None
-            self.control_widgets(enabled=False)
+            self._reset_connection_state()
             # if there is no moninj server defined, just stop connecting
             if self.proxy_moninj_server is None:
                 continue
@@ -247,15 +241,7 @@ class DeviceManager:
                 await asyncio.sleep(10.)
                 self.reconnect_core.set()
             else:
-                self.moninj_connection_pubsub = new_moninj_pubsub
-                self.moninj_connection_rpc = new_moninj_rpc
-                for ttl_channel in self.docks["TTL"].widgets.keys():
-                    await self.setup_ttl_monitoring(True, ttl_channel)
-                for bus_channel, channel in self.docks["DDS"].widgets.keys():
-                    await self.setup_dds_monitoring(True, bus_channel, channel)
-                for spi_channel, channel in self.docks["DAC"].widgets.keys():
-                    await self.setup_dac_monitoring(True, spi_channel, channel)
-                self.control_widgets(enabled=True)
+                await self._init_connection(new_moninj_pubsub, new_moninj_rpc)
 
     async def close(self):
         self.moninj_connector_task.cancel()
@@ -270,3 +256,26 @@ class DeviceManager:
             asyncio.ensure_future(self.moninj_connection_pubsub.close())
         if self.moninj_connection_rpc is not None:
             asyncio.ensure_future(self.moninj_connection_rpc.close())
+
+    async def _init_connection(self, pubsub, rpc):
+        self.moninj_connection_pubsub = pubsub
+        self.moninj_connection_rpc = rpc
+        for ttl_channel in self.docks["TTL"].widgets.keys():
+            await self.setup_ttl_monitoring(True, ttl_channel)
+        for bus_channel, channel in self.docks["DDS"].widgets.keys():
+            await self.setup_dds_monitoring(True, bus_channel, channel)
+        for spi_channel, channel in self.docks["DAC"].widgets.keys():
+            await self.setup_dac_monitoring(True, spi_channel, channel)
+        self.control_widgets(enabled=True)
+
+    def _set_connection(self, moninj_serv, pubsub_port, rpc_port):
+        self.proxy_moninj_server = moninj_serv
+        self.proxy_moninj_pubsub_port = pubsub_port
+        self.proxy_moninj_rpc_port = rpc_port
+        self.reconnect_core.set()
+
+    def _reset_connection_state(self):
+        asyncio.ensure_future(self.ensure_connection_closed())
+        self.moninj_connection_pubsub = None
+        self.moninj_connection_rpc = None
+        self.control_widgets(enabled=False)
