@@ -3,9 +3,9 @@ use core::cell::RefCell;
 
 use io::Error as IoError;
 use io::Write;
-use moninj_proto::*;
-use sched::{Io, Mutex, TcpListener, TcpStream, Error as SchedError};
-use urc::Urc;
+use crate::moninj_proto::*;
+use crate::sched::{Io, Mutex, TcpListener, TcpStream, Error as SchedError};
+use crate::urc::Urc;
 use board_misoc::clock;
 use board_artiq::drtio_routing;
 

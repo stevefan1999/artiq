@@ -36,8 +36,8 @@ impl fmt::Display for Error {
 mod imp {
     use core::str;
     use byteorder::{ByteOrder, BigEndian};
-    use cache;
-    use spiflash;
+    use crate::cache;
+    use crate::spiflash;
     use super::Error;
     use core::fmt;
     use core::fmt::Write;
@@ -72,7 +72,7 @@ mod imp {
     }
 
     // One flash sector immediately before the firmware.
-    const ADDR: usize = ::mem::FLASH_BOOT_ADDRESS - spiflash::SECTOR_SIZE;
+    const ADDR: usize = crate::mem::FLASH_BOOT_ADDRESS - spiflash::SECTOR_SIZE;
     const SIZE: usize = spiflash::SECTOR_SIZE;
 
     mod lock {

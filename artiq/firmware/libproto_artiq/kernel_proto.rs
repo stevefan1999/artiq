@@ -53,7 +53,7 @@ pub enum Message<'a> {
     RunAborted,
 
     RpcSend {
-        async: bool,
+        r#async: bool,
         service: u32,
         tag: &'a [u8],
         data: *const *const ()

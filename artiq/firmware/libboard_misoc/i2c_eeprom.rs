@@ -1,4 +1,4 @@
-use i2c;
+use crate::i2c;
 
 /// [Hardware manual](http://ww1.microchip.com/downloads/en/DeviceDoc/24AA02E48-24AA025E48-24AA02E64-24AA025E64-Data-Sheet-20002124H.pdf)
 pub struct EEPROM {

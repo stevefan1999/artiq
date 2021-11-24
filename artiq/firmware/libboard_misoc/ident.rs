@@ -1,5 +1,5 @@
 use core::{cmp, str};
-use csr;
+use crate::csr;
 
 pub fn read(buf: &mut [u8]) -> &str {
     unsafe {

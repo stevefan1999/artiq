@@ -2,7 +2,7 @@
 use {core::str::Utf8Error, alloc::string::String};
 use byteorder::{ByteOrder, NativeEndian};
 
-use ::{Read, Write, Error as IoError};
+use crate::{Read, Write, Error as IoError};
 
 #[cfg(feature = "alloc")]
 #[derive(Fail, Debug, Clone, PartialEq)]

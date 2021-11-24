@@ -1,11 +1,11 @@
 use core::cell::RefCell;
-use urc::Urc;
+use crate::urc::Urc;
 use board_misoc::csr;
 #[cfg(has_drtio)]
 use board_misoc::clock;
 use board_artiq::drtio_routing;
-use sched::Io;
-use sched::Mutex;
+use crate::sched::Io;
+use crate::sched::Mutex;
 
 #[cfg(has_drtio)]
 pub mod drtio {

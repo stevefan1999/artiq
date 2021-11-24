@@ -8,12 +8,12 @@ pub struct TimestampedData {
 mod imp {
     use core::ptr::{read_volatile, write_volatile};
     use cslice::CSlice;
-    use rtio::TimestampedData;
+    use crate::rtio::TimestampedData;
 
     use board_misoc::csr;
-    use ::send;
-    use ::recv;
-    use kernel_proto::*;
+    use crate::send;
+    use crate::recv;
+    use crate::kernel_proto::*;
 
     pub const RTIO_O_STATUS_WAIT:                      u8 = 1;
     pub const RTIO_O_STATUS_UNDERFLOW:                 u8 = 2;

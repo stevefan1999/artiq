@@ -1,8 +1,8 @@
 use core::fmt::Write;
 use log::{Log, LevelFilter, Metadata, Record, set_logger, set_max_level};
 
-use clock;
-use uart_console::Console;
+use crate::clock;
+use crate::uart_console::Console;
 
 pub struct ConsoleLogger;
 

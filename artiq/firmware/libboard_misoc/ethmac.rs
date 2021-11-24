@@ -3,8 +3,8 @@ use smoltcp::Result;
 use smoltcp::time::Instant;
 use smoltcp::phy::{self, DeviceCapabilities, Device};
 
-use csr;
-use mem::ETHMAC_BASE;
+use crate::csr;
+use crate::mem::ETHMAC_BASE;
 
 const RX_SLOTS: usize = csr::ETHMAC_RX_SLOTS as usize;
 const TX_SLOTS: usize = csr::ETHMAC_TX_SLOTS as usize;

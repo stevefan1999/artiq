@@ -1,4 +1,4 @@
-use {Read, Write};
+use crate::{Read, Write};
 
 #[derive(Debug, Clone)]
 pub struct Cursor<T> {

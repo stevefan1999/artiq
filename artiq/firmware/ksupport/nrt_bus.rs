@@ -1,7 +1,7 @@
 pub mod i2c {
-    use ::send;
-    use ::recv;
-    use kernel_proto::*;
+    use crate::send;
+    use crate::recv;
+    use crate::kernel_proto::*;
 
     pub extern fn start(busno: i32) {
         send(&I2cStartRequest { busno: busno as u32 });
@@ -46,9 +46,9 @@ pub mod i2c {
 }
 
 pub mod spi {
-    use ::send;
-    use ::recv;
-    use kernel_proto::*;
+    use crate::send;
+    use crate::recv;
+    use crate::kernel_proto::*;
 
     pub extern fn set_config(busno: i32, flags: i32, length: i32, div: i32, cs: i32) {
         send(&SpiSetConfigRequest { busno: busno as u32, flags: flags as u8,

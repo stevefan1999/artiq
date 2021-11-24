@@ -20,7 +20,7 @@ use io::Cursor;
 use dyld::Library;
 use board_artiq::{mailbox, rpc_queue};
 use proto_artiq::{kernel_proto, rpc_proto};
-use kernel_proto::*;
+use crate::kernel_proto::*;
 #[cfg(has_rtio_dma)]
 use board_misoc::csr;
 use riscv::register::{mcause, mepc, mtval};
@@ -125,7 +125,7 @@ pub extern fn send_to_rtio_log(text: CSlice<u8>) {
 extern fn rpc_send(service: u32, tag: &CSlice<u8>, data: *const *const ()) {
     while !rpc_queue::empty() {}
     send(&RpcSend {
-        async:   false,
+        r#async:   false,
         service: service,
         tag:     tag.as_ref(),
         data:    data
@@ -147,7 +147,7 @@ extern fn rpc_send_async(service: u32, tag: &CSlice<u8>, data: *const *const ())
 
         while !rpc_queue::empty() {}
         send(&RpcSend {
-            async:   true,
+            r#async:   true,
             service: service,
             tag:     tag.as_ref(),
             data:    data

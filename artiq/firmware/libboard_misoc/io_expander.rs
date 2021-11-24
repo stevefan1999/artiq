@@ -1,5 +1,5 @@
-use i2c;
-use csr;
+use crate::i2c;
+use crate::csr;
 
 pub struct IoExpander {
     busno: u8,

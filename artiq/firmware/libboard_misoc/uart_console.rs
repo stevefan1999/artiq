@@ -5,7 +5,7 @@ pub struct Console;
 impl fmt::Write for Console {
     #[cfg(has_uart)]
     fn write_str(&mut self, s: &str) -> Result<(), fmt::Error> {
-        use csr;
+        use crate::csr;
 
         for c in s.bytes() {
             unsafe {

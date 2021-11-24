@@ -1,12 +1,12 @@
 #[cfg(has_ddrphy)]
 mod ddr {
     use core::{ptr, fmt};
-    use csr::{dfii, ddrphy};
-    use csr::CONFIG_DATA_WIDTH_BYTES;
-    use sdram_phy::{self, spin_cycles};
-    use sdram_phy::{DFII_COMMAND_CS, DFII_COMMAND_WE, DFII_COMMAND_CAS, DFII_COMMAND_RAS,
+    use crate::csr::{dfii, ddrphy};
+    use crate::csr::CONFIG_DATA_WIDTH_BYTES;
+    use crate::sdram_phy::{self, spin_cycles};
+    use crate::sdram_phy::{DFII_COMMAND_CS, DFII_COMMAND_WE, DFII_COMMAND_CAS, DFII_COMMAND_RAS,
                     DFII_COMMAND_WRDATA, DFII_COMMAND_RDDATA};
-    use sdram_phy::{DFII_NPHASES, DFII_PIX_DATA_SIZE, DFII_PIX_WRDATA_ADDR, DFII_PIX_RDDATA_ADDR};
+    use crate::sdram_phy::{DFII_NPHASES, DFII_PIX_DATA_SIZE, DFII_PIX_WRDATA_ADDR, DFII_PIX_RDDATA_ADDR};
 
     #[cfg(kusddrphy)]
     const DDRPHY_MAX_DELAY: u16 = 512;
@@ -442,8 +442,8 @@ mod ddr {
 }
 
 use core::fmt;
-use csr;
-use sdram_phy;
+use crate::csr;
+use crate::sdram_phy;
 
 pub unsafe fn init(mut _logger: Option<&mut dyn fmt::Write>) -> bool {
     sdram_phy::initialize();

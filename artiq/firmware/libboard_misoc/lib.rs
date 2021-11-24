@@ -14,7 +14,7 @@ mod arch;
 #[cfg(target_arch = "riscv32")]
 extern crate riscv;
 
-pub use arch::*;
+pub use crate::arch::*;
 
 include!(concat!(env!("BUILDINC_DIRECTORY"), "/generated/mem.rs"));
 include!(concat!(env!("BUILDINC_DIRECTORY"), "/generated/csr.rs"));

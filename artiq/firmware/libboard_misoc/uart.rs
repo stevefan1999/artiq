@@ -1,4 +1,4 @@
-use csr;
+use crate::csr;
 
 pub fn set_speed(rate: u32) {
     unsafe {

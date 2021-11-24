@@ -150,7 +150,7 @@ extern fn uncaught_exception(_version: c_int,
         }
 
         if actions as u32 & uw::_UA_END_OF_STACK as u32 != 0 {
-            ::terminate(&exception_info.exception.unwrap(),
+            crate::terminate(&exception_info.exception.unwrap(),
                         exception_info.backtrace[..exception_info.backtrace_size].as_mut())
         } else {
             uw::_URC_NO_REASON

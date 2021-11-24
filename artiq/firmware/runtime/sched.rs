@@ -13,7 +13,7 @@ use smoltcp::socket::{SocketHandle, SocketRef};
 
 use io::{Read, Write};
 use board_misoc::clock;
-use urc::Urc;
+use crate::urc::Urc;
 
 #[derive(Fail, Debug)]
 pub enum Error {

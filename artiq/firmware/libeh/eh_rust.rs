@@ -17,7 +17,7 @@
 use unwind as uw;
 use libc::{c_int, uintptr_t};
 
-use dwarf::{self, EHAction, EHContext};
+use crate::dwarf::{self, EHAction, EHContext};
 
 // Register ids were lifted from LLVM's TargetLowering::getExceptionPointerRegister()
 // and TargetLowering::getExceptionSelectorRegister() for each architecture,

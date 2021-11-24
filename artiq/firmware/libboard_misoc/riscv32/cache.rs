@@ -1,9 +1,9 @@
 #[cfg(has_ddrphy)]
 use core::ptr;
 #[cfg(has_ddrphy)]
-use csr;
+use crate::csr;
 #[cfg(has_ddrphy)]
-use mem;
+use crate::mem;
 
 pub fn flush_cpu_icache() {
     unsafe {

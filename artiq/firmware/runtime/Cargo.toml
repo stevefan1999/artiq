@@ -3,6 +3,7 @@ authors = ["M-Labs"]
 name = "runtime"
 version = "0.0.0"
 build = "build.rs"
+edition = "2018"
 
 [lib]
 name = "runtime"

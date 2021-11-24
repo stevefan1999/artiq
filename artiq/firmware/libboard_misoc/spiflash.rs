@@ -1,5 +1,5 @@
 use core::cmp;
-use csr;
+use crate::csr;
 
 pub const SECTOR_SIZE: usize = csr::CONFIG_SPIFLASH_SECTOR_SIZE as usize;
 pub const PAGE_SIZE:   usize = csr::CONFIG_SPIFLASH_PAGE_SIZE   as usize;

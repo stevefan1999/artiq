@@ -1,9 +1,9 @@
 use core::cell::RefCell;
-use kernel_proto as kern;
-use sched::{Io, Mutex, Error as SchedError};
-use session::{kern_acknowledge, kern_send, Error};
-use rtio_mgt;
-use urc::Urc;
+use crate::kernel_proto as kern;
+use crate::sched::{Io, Mutex, Error as SchedError};
+use crate::session::{kern_acknowledge, kern_send, Error};
+use crate::rtio_mgt;
+use crate::urc::Urc;
 use board_misoc::i2c as local_i2c;
 use board_artiq::drtio_routing;
 use board_artiq::spi as local_spi;

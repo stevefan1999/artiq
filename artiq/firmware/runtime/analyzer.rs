@@ -1,7 +1,7 @@
 use io::{Write, Error as IoError};
 use board_misoc::{csr, cache};
-use sched::{Io, TcpListener, TcpStream, Error as SchedError};
-use analyzer_proto::*;
+use crate::sched::{Io, TcpListener, TcpStream, Error as SchedError};
+use crate::analyzer_proto::*;
 
 const BUFFER_SIZE: usize = 512 * 1024;
 

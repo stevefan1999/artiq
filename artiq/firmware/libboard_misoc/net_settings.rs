@@ -2,9 +2,9 @@ use core::fmt;
 
 use smoltcp::wire::{EthernetAddress, IpAddress};
 
-use config;
+use crate::config;
 #[cfg(soc_platform = "kasli")]
-use i2c_eeprom;
+use crate::i2c_eeprom;
 
 
 pub struct NetAddresses {

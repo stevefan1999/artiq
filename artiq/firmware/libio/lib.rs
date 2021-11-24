@@ -14,11 +14,11 @@ mod cursor;
 #[cfg(feature = "byteorder")]
 mod proto;
 
-pub use cursor::Cursor;
+pub use crate::cursor::Cursor;
 #[cfg(feature = "byteorder")]
-pub use proto::{ProtoRead, ProtoWrite};
+pub use crate::proto::{ProtoRead, ProtoWrite};
 #[cfg(all(feature = "byteorder", feature = "alloc"))]
-pub use proto::ReadStringError;
+pub use crate::proto::ReadStringError;
 
 #[derive(Fail, Debug, Clone, PartialEq)]
 pub enum Error<T> {

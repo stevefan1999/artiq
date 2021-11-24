@@ -4,18 +4,18 @@ use byteorder::{ByteOrder, NativeEndian};
 
 use io::{Read, Write, Error as IoError};
 use board_misoc::{ident, cache, config};
-use {mailbox, rpc_queue, kernel};
-use urc::Urc;
-use sched::{ThreadHandle, Io, Mutex, TcpListener, TcpStream, Error as SchedError};
-use rtio_clocking;
-use rtio_dma::Manager as DmaManager;
-use cache::Cache;
-use kern_hwreq;
+use crate::{mailbox, rpc_queue, kernel};
+use crate::urc::Urc;
+use crate::sched::{ThreadHandle, Io, Mutex, TcpListener, TcpStream, Error as SchedError};
+use crate::rtio_clocking;
+use crate::rtio_dma::Manager as DmaManager;
+use crate::cache::Cache;
+use crate::kern_hwreq;
 use board_artiq::drtio_routing;
 
-use rpc_proto as rpc;
-use session_proto as host;
-use kernel_proto as kern;
+use crate::rpc_proto as rpc;
+use crate::session_proto as host;
+use crate::kernel_proto as kern;
 
 #[derive(Fail, Debug)]
 pub enum Error<T> {
@@ -389,13 +389,13 @@ fn process_kern_message(io: &Io, aux_mutex: &Mutex,
                 })
             }
 
-            &kern::RpcSend { async, service, tag, data } => {
+            &kern::RpcSend { r#async, service, tag, data } => {
                 match stream {
                     None => unexpected!("unexpected RPC in flash kernel"),
                     Some(ref mut stream) => {
-                        host_write(stream, host::Reply::RpcRequest { async: async })?;
+                        host_write(stream, host::Reply::RpcRequest { r#async: r#async })?;
                         rpc::send_args(stream, service, tag, data)?;
-                        if !async {
+                        if !r#async {
                             session.kernel_state = KernelState::RpcWait
                         }
                         kern_acknowledge()
@@ -474,7 +474,7 @@ fn process_kern_queued_rpc(stream: &mut TcpStream,
     rpc_queue::dequeue(|slice| {
         debug!("comm<-kern (async RPC)");
         let length = NativeEndian::read_u32(slice) as usize;
-        host_write(stream, host::Reply::RpcRequest { async: true })?;
+        host_write(stream, host::Reply::RpcRequest { r#async: true })?;
         debug!("{:?}", &slice[4..][..length]);
         stream.write_all(&slice[4..][..length])?;
         Ok(())

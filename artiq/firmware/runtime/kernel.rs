@@ -1,9 +1,9 @@
 use core::ptr;
 use board_misoc::csr;
-use mailbox;
-use rpc_queue;
+use crate::mailbox;
+use crate::rpc_queue;
 
-use kernel_proto::{KERNELCPU_EXEC_ADDRESS, KERNELCPU_LAST_ADDRESS, KSUPPORT_HEADER_SIZE};
+use crate::kernel_proto::{KERNELCPU_EXEC_ADDRESS, KERNELCPU_LAST_ADDRESS, KSUPPORT_HEADER_SIZE};
 
 #[cfg(has_kernel_cpu)]
 pub unsafe fn start() {

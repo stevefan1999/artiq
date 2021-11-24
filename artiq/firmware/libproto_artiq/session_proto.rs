@@ -103,7 +103,7 @@ pub enum Reply<'a> {
         backtrace: &'a [usize]
     },
 
-    RpcRequest { async: bool },
+    RpcRequest { r#async: bool },
 
     ClockFailure,
 }
@@ -185,9 +185,9 @@ impl<'a> Reply<'a> {
                 }
             },
 
-            Reply::RpcRequest { async } => {
+            Reply::RpcRequest { r#async } => {
                 writer.write_u8(10)?;
-                writer.write_u8(async as u8)?;
+                writer.write_u8(r#async as u8)?;
             },
 
             Reply::ClockFailure => {

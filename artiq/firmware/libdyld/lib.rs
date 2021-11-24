@@ -1,7 +1,7 @@
 #![no_std]
 
 use core::{mem, ptr, fmt, slice, str, convert};
-use elf::*;
+use crate::elf::*;
 
 pub mod elf;
 
@@ -270,11 +270,11 @@ impl<'a> Library<'a> {
         let dyn_off = dyn_off.ok_or("cannot find a dynamic header")?;
         for i in 0.. {
             let dyn_off = dyn_off as usize + i * mem::size_of::<Elf32_Dyn>();
-            let dyn = get_ref::<Elf32_Dyn>(image, dyn_off)
+            let r#dyn = get_ref::<Elf32_Dyn>(image, dyn_off)
                               .map_err(|()| "cannot read dynamic header")?;
 
-            let val = unsafe { dyn.d_un.d_val } as usize;
-            match dyn.d_tag {
+            let val = unsafe { r#dyn.d_un.d_val } as usize;
+            match r#dyn.d_tag {
                 DT_NULL     => break,
                 DT_REL      => return Err("relocations with implicit addend are not supported")?,
                 DT_STRTAB   => strtab_off = val,
