@@ -29,6 +29,9 @@ board_artiq = { path = "../libboard_artiq" }
 proto_artiq = { path = "../libproto_artiq", features = ["log", "alloc"] }
 smoltcp = { version = "0.6.0", default-features = false, features = ["alloc", "ethernet", "proto-ipv4", "proto-ipv6", "socket-tcp"] }
 riscv = { version = "0.6.0", features = ["inline-asm"] }
+embedded-websocket = { version = "0.8.0", default-features = false }
+httparse = { version = "1.5.1", default-features = false }
+heapless = "0.7.8"
 
 [dependencies.fringe]
 git = "https://git.m-labs.hk/M-Labs/libfringe.git"

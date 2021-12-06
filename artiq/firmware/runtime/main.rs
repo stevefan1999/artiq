@@ -25,6 +25,9 @@ extern crate logger_artiq;
 extern crate proto_artiq;
 extern crate riscv;
 
+extern crate httparse;
+extern crate embedded_websocket;
+
 use core::cell::RefCell;
 use core::convert::TryFrom;
 use smoltcp::wire::IpCidr;
@@ -58,6 +61,8 @@ mod session;
 mod moninj;
 #[cfg(has_rtio_analyzer)]
 mod analyzer;
+
+mod http_fun;
 
 #[cfg(has_grabber)]
 fn grabber_thread(io: sched::Io) {
@@ -207,6 +212,8 @@ fn startup() {
 
     #[cfg(has_grabber)]
     io.spawn(4096, grabber_thread);
+
+    io.spawn(4096, http_fun::thread);
 
     let mut net_stats = ethmac::EthernetStatistics::new();
     loop {
