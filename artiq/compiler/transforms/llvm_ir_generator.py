@@ -10,6 +10,7 @@ from llvmlite import ir as ll, binding as llvm
 from ...language import core as language_core
 from .. import types, builtins, ir
 from ..embedding import SpecializedFunction
+from artiq.compiler.targets import RV32GTarget
 
 
 llvoid     = ll.VoidType()
@@ -1097,20 +1098,28 @@ class LLVMIRGenerator:
             if self.target.now_pinning:
                 # Word swap now.old as CPU is little endian
                 # Most significant word is stored in lower address (see generated csr.rs)
-                llnow_raw = self.llbuilder.load(self.llbuiltin("now"), name=insn.name)
-                llnow_lo = self.llbuilder.shl(llnow_raw, ll.Constant(lli64, 32))
-                llnow_hi = self.llbuilder.lshr(llnow_raw, ll.Constant(lli64, 32))
-                return self.llbuilder.or_(llnow_lo, llnow_hi)
+                csr_offset = 2 if isinstance(self.target, RV32GTarget) else 1
+
+                llnow_hiptr = self.llbuilder.bitcast(self.llbuiltin("now"), lli32.as_pointer())
+                llnow_loptr = self.llbuilder.gep(llnow_hiptr, [self.llindex(csr_offset)])
+                llnow_hi = self.llbuilder.load(llnow_hiptr, name="now.hi")
+                llnow_lo = self.llbuilder.load(llnow_loptr, name="now.lo")
+                llzext_hi = self.llbuilder.zext(llnow_hi, lli64)
+                llshifted_hi = self.llbuilder.shl(llzext_hi, ll.Constant(lli64, 32))
+                llzext_lo = self.llbuilder.zext(llnow_lo, lli64)
+                return self.llbuilder.or_(llshifted_hi, llzext_lo)
             else:
                 return self.llbuilder.call(self.llbuiltin("now_mu"), [])
         elif insn.op == "at_mu":
             time, = insn.operands
             lltime = self.map(time)
             if self.target.now_pinning:
+                csr_offset = 2 if isinstance(self.target, RV32GTarget) else 1
+
                 lltime_hi = self.llbuilder.trunc(self.llbuilder.lshr(lltime, ll.Constant(lli64, 32)), lli32)
                 lltime_lo = self.llbuilder.trunc(lltime, lli32)
                 llnow_hiptr = self.llbuilder.bitcast(self.llbuiltin("now"), lli32.as_pointer())
-                llnow_loptr = self.llbuilder.gep(llnow_hiptr, [self.llindex(1)])
+                llnow_loptr = self.llbuilder.gep(llnow_hiptr, [self.llindex(csr_offset)])
                 llstore_hi = self.llbuilder.store_atomic(lltime_hi, llnow_hiptr, ordering="seq_cst", align=4)
                 llstore_lo = self.llbuilder.store_atomic(lltime_lo, llnow_loptr, ordering="seq_cst", align=4)
                 return llstore_lo
@@ -1120,20 +1129,22 @@ class LLVMIRGenerator:
             interval, = insn.operands
             llinterval = self.map(interval)
             if self.target.now_pinning:
-                llnowptr = self.llbuiltin("now")
-                llnow = self.llbuilder.load(llnowptr, name="now.old")
-
                 # Word swap now.old as CPU is little endian
                 # Most significant word is stored in lower address (see generated csr.rs)
-                llnow_lo = self.llbuilder.shl(llnow, ll.Constant(lli64, 32))
-                llnow_hi = self.llbuilder.lshr(llnow, ll.Constant(lli64, 32))
-                llnow = self.llbuilder.or_(llnow_lo, llnow_hi)
+                csr_offset = 2 if isinstance(self.target, RV32GTarget) else 1
+
+                llnow_hiptr = self.llbuilder.bitcast(self.llbuiltin("now"), lli32.as_pointer())
+                llnow_loptr = self.llbuilder.gep(llnow_hiptr, [self.llindex(csr_offset)])
+                llnow_hi = self.llbuilder.load(llnow_hiptr, name="now.hi")
+                llnow_lo = self.llbuilder.load(llnow_loptr, name="now.lo")
+                llzext_hi = self.llbuilder.zext(llnow_hi, lli64)
+                llshifted_hi = self.llbuilder.shl(llzext_hi, ll.Constant(lli64, 32))
+                llzext_lo = self.llbuilder.zext(llnow_lo, lli64)
+                llnow = self.llbuilder.or_(llshifted_hi, llzext_lo)
 
                 lladjusted = self.llbuilder.add(llnow, llinterval, name="now.new")
                 lladjusted_hi = self.llbuilder.trunc(self.llbuilder.lshr(lladjusted, ll.Constant(lli64, 32)), lli32)
                 lladjusted_lo = self.llbuilder.trunc(lladjusted, lli32)
-                llnow_hiptr = self.llbuilder.bitcast(llnowptr, lli32.as_pointer())
-                llnow_loptr = self.llbuilder.gep(llnow_hiptr, [self.llindex(1)])
                 llstore_hi = self.llbuilder.store_atomic(lladjusted_hi, llnow_hiptr, ordering="seq_cst", align=4)
                 llstore_lo = self.llbuilder.store_atomic(lladjusted_lo, llnow_loptr, ordering="seq_cst", align=4)
                 return llstore_lo
@@ -1163,26 +1174,32 @@ class LLVMIRGenerator:
         else:
             llfun = self.map(insn.static_target_function)
         llenv     = self.llbuilder.extract_value(llclosure, 0, name="env.fun")
-        return llfun, [llenv] + list(llargs)
+        return llfun, [llenv] + list(llargs), {}
 
     def _prepare_ffi_call(self, insn):
         llargs = []
-        byvals = []
+        llarg_attrs = {}
         for i, arg in enumerate(insn.arguments()):
             llarg = self.map(arg)
             if isinstance(llarg.type, (ll.LiteralStructType, ll.IdentifiedStructType)):
                 llslot = self.llbuilder.alloca(llarg.type)
                 self.llbuilder.store(llarg, llslot)
                 llargs.append(llslot)
-                byvals.append(i)
+                llarg_attrs[i] = "byval"
             else:
                 llargs.append(llarg)
+
+        llretty = self.llty_of_type(insn.type, for_return=True)
+        is_sret = self.needs_sret(llretty)
+        if is_sret:
+            llarg_attrs = {i + 1: a for (i, a) in llarg_attrs.items()}
+            llarg_attrs[0] = "sret"
 
         llfunname = insn.target_function().type.name
         llfun     = self.llmodule.globals.get(llfunname)
         if llfun is None:
-            llretty = self.llty_of_type(insn.type, for_return=True)
-            if self.needs_sret(llretty):
+            # Function has not been declared in the current LLVM module, do it now.
+            if is_sret:
                 llfunty = ll.FunctionType(llvoid, [llretty.as_pointer()] +
                                           [llarg.type for llarg in llargs])
             else:
@@ -1190,17 +1207,14 @@ class LLVMIRGenerator:
 
             llfun = ll.Function(self.llmodule, llfunty,
                                 insn.target_function().type.name)
-            if self.needs_sret(llretty):
-                llfun.args[0].add_attribute('sret')
-                byvals = [i + 1 for i in byvals]
-            for i in byvals:
-                llfun.args[i].add_attribute('byval')
+            for idx, attr in llarg_attrs.items():
+                llfun.args[idx].add_attribute(attr)
             if 'nounwind' in insn.target_function().type.flags:
                 llfun.attributes.add('nounwind')
             if 'nowrite' in insn.target_function().type.flags:
                 llfun.attributes.add('inaccessiblememonly')
 
-        return llfun, list(llargs)
+        return llfun, list(llargs), llarg_attrs
 
     def _build_rpc(self, fun_loc, fun_type, args, llnormalblock, llunwindblock):
         llservice = ll.Constant(lli32, fun_type.service)
@@ -1336,20 +1350,21 @@ class LLVMIRGenerator:
                                    insn.arguments(),
                                    llnormalblock=None, llunwindblock=None)
         elif types.is_external_function(functiontyp):
-            llfun, llargs = self._prepare_ffi_call(insn)
+            llfun, llargs, llarg_attrs = self._prepare_ffi_call(insn)
         else:
-            llfun, llargs = self._prepare_closure_call(insn)
+            llfun, llargs, llarg_attrs = self._prepare_closure_call(insn)
 
         if self.has_sret(functiontyp):
             llstackptr = self.llbuilder.call(self.llbuiltin("llvm.stacksave"), [])
 
             llresultslot = self.llbuilder.alloca(llfun.type.pointee.args[0].pointee)
-            llcall = self.llbuilder.call(llfun, [llresultslot] + llargs)
+            self.llbuilder.call(llfun, [llresultslot] + llargs, arg_attrs=llarg_attrs)
             llresult = self.llbuilder.load(llresultslot)
 
             self.llbuilder.call(self.llbuiltin("llvm.stackrestore"), [llstackptr])
         else:
-            llcall = llresult = self.llbuilder.call(llfun, llargs, name=insn.name)
+            llresult = self.llbuilder.call(llfun, llargs, name=insn.name,
+                                           arg_attrs=llarg_attrs)
 
             if isinstance(llresult.type, ll.VoidType):
                 # We have NoneType-returning functions return void, but None is
@@ -1368,16 +1383,17 @@ class LLVMIRGenerator:
                                    insn.arguments(),
                                    llnormalblock, llunwindblock)
         elif types.is_external_function(functiontyp):
-            llfun, llargs = self._prepare_ffi_call(insn)
+            llfun, llargs, llarg_attrs = self._prepare_ffi_call(insn)
         else:
-            llfun, llargs = self._prepare_closure_call(insn)
+            llfun, llargs, llarg_attrs = self._prepare_closure_call(insn)
 
         if self.has_sret(functiontyp):
             llstackptr = self.llbuilder.call(self.llbuiltin("llvm.stacksave"), [])
 
             llresultslot = self.llbuilder.alloca(llfun.type.pointee.args[0].pointee)
             llcall = self.llbuilder.invoke(llfun, [llresultslot] + llargs,
-                                           llnormalblock, llunwindblock, name=insn.name)
+                                           llnormalblock, llunwindblock, name=insn.name,
+                                           arg_attrs=llarg_attrs)
 
             self.llbuilder.position_at_start(llnormalblock)
             llresult = self.llbuilder.load(llresultslot)
@@ -1385,7 +1401,7 @@ class LLVMIRGenerator:
             self.llbuilder.call(self.llbuiltin("llvm.stackrestore"), [llstackptr])
         else:
             llcall = self.llbuilder.invoke(llfun, llargs, llnormalblock, llunwindblock,
-                                           name=insn.name)
+                                           name=insn.name, arg_attrs=llarg_attrs)
             llresult = llcall
 
             # The !tbaa metadata is not legal to use with the invoke instruction,

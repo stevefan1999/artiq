@@ -1,7 +1,7 @@
 {
   description = "A leading-edge control system for quantum information experiments";
 
-  inputs.nixpkgs.url = github:NixOS/nixpkgs/nixos-21.05;
+  inputs.nixpkgs.url = github:NixOS/nixpkgs/nixos-21.11;
   inputs.mozilla-overlay = { url = github:mozilla/nixpkgs-mozilla; flake = false; };
   inputs.src-sipyco = { url = github:m-labs/sipyco; flake = false; };
   inputs.src-pythonparser = { url = github:m-labs/pythonparser; flake = false; };
@@ -42,6 +42,8 @@
         xorg.libXext
         xorg.libXtst
         xorg.libXi
+        freetype
+        fontconfig
       ];
 
       sipyco = pkgs.python3Packages.buildPythonPackage {
@@ -100,11 +102,22 @@
 
       llvmlite-new = pkgs.python3Packages.buildPythonPackage rec {
         pname = "llvmlite";
-        version = "0.37.0rc2";
+        version = "0.37.0-artiq";
         src = pkgs.python3Packages.fetchPypi {
-          inherit pname version;
-          sha256 = "sha256-F1quz+76JOt1jaQPVzdKe7RfN6gWG2lyE82qTvgyY/c=";
+          inherit pname;
+          version = "0.37.0";
+          sha256 = "sha256-Y5K4cM0BjsDGRda7uRjWqg7sqMYmdLqu4whi1raGWxU=";
         };
+        patches = [
+          (pkgs.fetchurl {
+            url = "https://git.m-labs.hk/M-Labs/nix-scripts/raw/branch/master/artiq-fast/pkgs/llvmlite-abiname.diff";
+            sha256 = "1zlss9vlhjgch6gf5gc0647kkjdwjk0833ld88xwd9vmwvkdmp3v";
+          })
+          (pkgs.fetchurl {
+            url = "https://git.m-labs.hk/M-Labs/nix-scripts/raw/branch/master/artiq-fast/pkgs/llvmlite-callsite.diff";
+            sha256 = "sha256-JrIXPnI7E7Y5NIFxswVBmRfQvv61lqKDDnNJrr+nDCg=";
+          })
+        ];
         nativeBuildInputs = [ pkgs.llvm_11 ];
         # Disable static linking
         # https://github.com/numba/llvmlite/issues/93
@@ -257,7 +270,6 @@
             ln -s $ARTIQ_PATH/firmware/Cargo.lock .
             cargoSetupPostUnpackHook
             cargoSetupPostPatchHook
-            export TARGET_AR=llvm-ar
             ${buildCommand}
             '';
           doCheck = true;
@@ -371,7 +383,6 @@
           packages.x86_64-linux.vivado
           packages.x86_64-linux.openocd-bscanspi
         ];
-        TARGET_AR="llvm-ar";
       };
 
       hydraJobs = {
@@ -392,17 +403,18 @@
           phases = [ "buildPhase" ];
           buildPhase =
             ''
+            whoami
             export HOME=`mktemp -d`
             mkdir $HOME/.ssh
-            cp /opt/hydra_id_rsa $HOME/.ssh/id_rsa
-            cp /opt/hydra_id_rsa.pub $HOME/.ssh/id_rsa.pub
+            cp /opt/hydra_id_ed25519 $HOME/.ssh/id_ed25519
+            cp /opt/hydra_id_ed25519.pub $HOME/.ssh/id_ed25519.pub
             echo "rpi-1 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPOBQVcsvk6WgRj18v4m0zkFeKrcN9gA+r6sxQxNwFpv" > $HOME/.ssh/known_hosts
-            chmod 600 $HOME/.ssh/id_rsa
+            chmod 600 $HOME/.ssh/id_ed25519
             LOCKCTL=$(mktemp -d)
             mkfifo $LOCKCTL/lockctl
 
             cat $LOCKCTL/lockctl | ${pkgs.openssh}/bin/ssh \
-              -i $HOME/.ssh/id_rsa \
+              -i $HOME/.ssh/id_ed25519 \
               -o UserKnownHostsFile=$HOME/.ssh/known_hosts \
               rpi-1 \
               'mkdir -p /tmp/board_lock && flock /tmp/board_lock/kc705-1 -c "echo Ok; cat"' \
