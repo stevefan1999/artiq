@@ -27,20 +27,19 @@ def setup_from_ddb(ddb):
                 args, module_, class_ = v["arguments"], v["module"], v["class"]
 
                 def handle_spi():
-                    spi_device = args["spi_device"]
-                    spi_device = ddb[spi_device]
+                    spi_device = ddb[args["spi_device"]]
                     while isinstance(spi_device, str):
                         spi_device = ddb[spi_device]
                     spi_channel = spi_device["arguments"]["channel"]
                     for channel in range(32):
-                        widget = WidgetDesc((k, channel), comment, DACWidget, (spi_channel, channel, k))
-                        description.add(widget)
+                        description.add(WidgetDesc((k, channel), comment, DACWidget, (spi_channel, channel, k)))
 
                 if module_ == "artiq.coredevice.ttl":
-                    description.add(WidgetDesc(k, comment, TTLWidget, (args["channel"], class_ == "TTLOut", k)))
+                    channel = args["channel"]
+                    description.add(WidgetDesc(k, comment, TTLWidget, (channel, class_ == "TTLOut", k)))
                 elif module_ == "artiq.coredevice.ad9914" and class_ == "AD9914":
-                    dds_sysclk = args["sysclk"]
-                    description.add(WidgetDesc(k, comment, DDSWidget, (args["bus_channel"], args["channel"], k)))
+                    dds_sysclk, bus_channel, channel = args["sysclk"], args["bus_channel"], args["channel"]
+                    description.add(WidgetDesc(k, comment, DDSWidget, (bus_channel, channel, k)))
                 elif module_ == "artiq.coredevice.ad53xx" and class_ == "AD53XX":
                     handle_spi()
                 elif module_ == "artiq.coredevice.zotino" and class_ == "Zotino":
@@ -52,10 +51,3 @@ def setup_from_ddb(ddb):
 
 WidgetDesc = namedtuple("WidgetDesc", "uid comment cls arguments")
 
-
-def _when_value_is_instance(table, value):
-    for (type_, fn) in table.items():
-        if isinstance(value, type_):
-            return fn(value)
-    else:
-        raise ValueError

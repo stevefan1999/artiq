@@ -2,15 +2,17 @@ import asyncio
 
 from PyQt5 import QtWidgets, QtCore
 
+from artiq.coredevice.comm_moninj import TTLOverride, TTLProbe
+from artiq.dashboard.moninj.widgets import MoninjWidget
 from artiq.gui.tools import LayoutWidget
 
 
-class TTLWidget(QtWidgets.QFrame):
+class TTLWidget(MoninjWidget):
     def __init__(self, dm, channel, force_out, title):
         QtWidgets.QFrame.__init__(self)
 
         self.channel = channel
-        self.set_mode = dm.ttl_set_mode
+        self.dm = dm
         self.force_out = force_out
 
         self.setFrameShape(QtWidgets.QFrame.Box)
@@ -71,31 +73,22 @@ class TTLWidget(QtWidgets.QFrame):
 
     def enterEvent(self, event):
         self.stack.setCurrentIndex(1)
-        QtWidgets.QFrame.enterEvent(self, event)
+        super().enterEvent(event)
 
     def leaveEvent(self, event):
         if not self.override.isChecked():
             self.stack.setCurrentIndex(0)
-        QtWidgets.QFrame.leaveEvent(self, event)
+        super().leaveEvent(event)
 
     async def override_toggled(self, override):
         if self.programmatic_change:
             return
-        if override:
-            if self.level.isChecked():
-                await self.set_mode(self.channel, "1")
-            else:
-                await self.set_mode(self.channel, "0")
-        else:
-            await self.set_mode(self.channel, "exp")
+        await self.set_mode(("1" if self.level.isChecked() else "0") if override else "exp")
 
     async def level_toggled(self, level):
         if self.programmatic_change:
             return
-        if level:
-            await self.set_mode(self.channel, "1")
-        else:
-            await self.set_mode(self.channel, "0")
+        await self.set_mode("1" if level else "0")
 
     def refresh_display(self):
         level = self.cur_override_level if self.cur_override else self.cur_level
@@ -107,12 +100,10 @@ class TTLWidget(QtWidgets.QFrame):
         else:
             color = ""
         self.value.setText(f'<font size="5"{color}>{value_s}</font>')
-        oe = self.cur_oe or self.force_out
-        direction = "OUT" if oe else "IN"
-        self.direction.setText(f'<font size="2">{direction}</font>')
+        self.direction.setText(f'<font size="2">{"OUT" if self.force_out or self.cur_oe else "IN"}</font>')
 
-        self.programmatic_change = True
         try:
+            self.programmatic_change = True
             self.override.setChecked(self.cur_override)
             if self.cur_override:
                 self.stack.setCurrentIndex(1)
@@ -120,5 +111,37 @@ class TTLWidget(QtWidgets.QFrame):
         finally:
             self.programmatic_change = False
 
+    @property
     def sort_key(self):
         return self.channel
+
+    async def setup_monitoring(self, enable):
+        if conn := self.dm.moninj_connection_rpc:
+            await conn.monitor_probe(enable, self.channel, TTLProbe.level.value)
+            await conn.monitor_probe(enable, self.channel, TTLProbe.oe.value)
+            await conn.monitor_injection(enable, self.channel, TTLOverride.en.value)
+            await conn.monitor_injection(enable, self.channel, TTLOverride.level.value)
+            if enable:
+                await conn.get_injection_status(self.channel, TTLOverride.en.value)
+
+    async def set_mode(self, mode):
+        if conn := self.dm.moninj_connection_rpc:
+            if mode == "0":
+                self.cur_override = True
+                self.cur_level = False
+                await conn.inject(self.channel, TTLOverride.level.value, 0)
+                await conn.inject(self.channel, TTLOverride.oe.value, 1)
+                await conn.inject(self.channel, TTLOverride.en.value, 1)
+            elif mode == "1":
+                self.cur_override = True
+                self.cur_level = True
+                await conn.inject(self.channel, TTLOverride.level.value, 1)
+                await conn.inject(self.channel, TTLOverride.oe.value, 1)
+                await conn.inject(self.channel, TTLOverride.en.value, 1)
+            elif mode == "exp":
+                self.cur_override = False
+                await conn.inject(self.channel, TTLOverride.en.value, 0)
+            else:
+                raise ValueError
+            # override state may have changed
+            self.refresh_display()

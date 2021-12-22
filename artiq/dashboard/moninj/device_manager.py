@@ -1,13 +1,13 @@
 import asyncio
-import collections
 import logging
-
+from collections import defaultdict
 from itertools import chain
+
 from sipyco.pc_rpc import AsyncioClient
 from sipyco.sync_struct import Subscriber
 
 from artiq.coredevice.comm_moninj import TTLOverride, TTLProbe
-from artiq.dashboard.moninj.util import setup_from_ddb, _when_value_is_instance
+from artiq.dashboard.moninj.util import setup_from_ddb
 from artiq.dashboard.moninj.widgets.dac import DACWidget
 from artiq.dashboard.moninj.widgets.dds import DDSWidget
 from artiq.dashboard.moninj.widgets.ttl import TTLWidget
@@ -15,27 +15,42 @@ from artiq.dashboard.moninj.widgets.ttl import TTLWidget
 logger = logging.getLogger(__name__)
 
 
-class Layout:
+class WidgetContainer:
     def __init__(self, setup_layout=lambda x: None):
         self.setup_layout = setup_layout
-        self.widgets = dict()
+        self._widgets = dict()
+        self._widgets_by_uid = dict()
 
-    def refresh_layout(self):
-        self.setup_layout(self.widgets.values())
+    async def remove_by_widget(self, widget):
+        widget.deleteLater()
+        await widget.setup_monitoring(False)
+        del self._widgets_by_uid[next(uid for uid, wkey in self._widgets_by_uid.items() if wkey == widget.sort_key)]
+        del self._widgets[widget.sort_key]
+        self.setup_layout(self._widgets.values())
 
-    def remove_widget(self, key):
-        del self.widgets[key]
-        self.refresh_layout()
+    async def remove_by_key(self, key):
+        await self.remove_by_widget(self._widgets[key])
 
-    def add_widget(self, chan, widget):
-        self.widgets[chan] = widget
-        self.refresh_layout()
+    async def remove_by_uid(self, uid):
+        await self.remove_by_key(self._widgets_by_uid[uid])
+
+    async def add(self, uid, widget):
+        self._widgets_by_uid[uid] = widget.sort_key
+        self._widgets[widget.sort_key] = widget
+        await widget.setup_monitoring(True)
+        self.setup_layout(self._widgets.values())
+
+    def get_by_key(self, key):
+        return self._widgets.get(key, None)
+
+    def values(self):
+        return self._widgets.values()
 
 
 class DeviceManager:
     def __init__(self):
         self._backstore = dict()
-        self.reconnect_core = asyncio.Event()
+        self.reconnect_signal = asyncio.Event()
         self.proxy_moninj_server = None
         self.proxy_moninj_pubsub_port = None
         self.proxy_moninj_rpc_port = None
@@ -46,138 +61,51 @@ class DeviceManager:
 
         self.ddb = dict()
         self.description = set()
-        self.widgets_by_uid = dict()
 
         self.dds_sysclk = 0
-        self.docks = collections.defaultdict(Layout)
+        self.docks = defaultdict(WidgetContainer)
 
     def init_ddb(self, ddb):
         self.ddb = ddb
         return ddb
 
     async def notify(self, _mod):
-        proxy_moninj_server, proxy_moninj_pubsub_port, proxy_moninj_rpc_port, dds_sysclk, description = \
+        def set_connection(moninj_serv, pubsub_port, rpc_port):
+            self.proxy_moninj_server = moninj_serv
+            self.proxy_moninj_pubsub_port = pubsub_port
+            self.proxy_moninj_rpc_port = rpc_port
+            self.reconnect_signal.set()
+
+        proxy_moninj_server, proxy_moninj_pubsub_port, proxy_moninj_rpc_port, dds_sysclk, new_desc = \
             setup_from_ddb(self.ddb)
         self.dds_sysclk = dds_sysclk if dds_sysclk else 0
-
         if proxy_moninj_server != self.proxy_moninj_server:
-            self._set_connection(proxy_moninj_server, proxy_moninj_pubsub_port, proxy_moninj_rpc_port)
-        await self._add_widgets(description - self.description)
-        await self._remove_widgets(self.description - description)
-        self.description = description
-
-    async def _add_widgets(self, addition):
-        for to_add in addition:
-            widget = to_add.cls(self, *to_add.arguments)
-            if to_add.comment:
-                widget.setToolTip(to_add.comment)
-            self.widgets_by_uid[to_add.uid] = widget
-
-            async def add_ttl(widget):
-                self.docks["TTL"].add_widget(widget.channel, widget)
-                await self.setup_ttl_monitoring(True, widget.channel)
-
-            async def add_dds(widget):
-                self.docks["DDS"].add_widget((widget.bus_channel, widget.channel), widget)
-                await self.setup_dds_monitoring(True, widget.bus_channel, widget.channel)
-
-            async def add_dac(widget):
-                self.docks["DAC"].add_widget((widget.spi_channel, widget.channel), widget)
-                await self.setup_dac_monitoring(True, widget.spi_channel, widget.channel)
-
-            await _when_value_is_instance({
-                TTLWidget: add_ttl,
-                DDSWidget: add_dds,
-                DACWidget: add_dac
-            }, widget)
-
-    async def _remove_widgets(self, difference):
-        for widget in [self.widgets_by_uid.pop(widget.uid) for widget in difference]:
-            widget.deleteLater()
-
-            async def remove_ttl(widget):
-                self.docks["TTL"].remove_widget(widget.channel)
-                await self.setup_ttl_monitoring(False, widget.channel)
-
-            async def remove_dds(widget):
-                self.docks["DDS"].remove_widget((widget.bus_channel, widget.channel))
-                await self.setup_dds_monitoring(False, widget.bus_channel, widget.channel)
-
-            async def remove_dac(widget):
-                self.docks["DAC"].remove_widget((widget.spi_channel, widget.channel))
-                await self.setup_dac_monitoring(False, widget.spi_channel, widget.channel)
-
-            _when_value_is_instance({
-                TTLWidget: remove_ttl,
-                DDSWidget: remove_dds,
-                DACWidget: remove_dac
-            }, widget)
-
-    async def ttl_set_mode(self, channel, mode):
-        if self.moninj_connection_rpc is not None:
-            widget = self.docks["TTL"].widgets[channel]
-            if mode == "0":
-                widget.cur_override = True
-                widget.cur_level = False
-
-                await self.moninj_connection_rpc.inject(channel, TTLOverride.level.value, 0)
-                await self.moninj_connection_rpc.inject(channel, TTLOverride.oe.value, 1)
-                await self.moninj_connection_rpc.inject(channel, TTLOverride.en.value, 1)
-            elif mode == "1":
-                widget.cur_override = True
-                widget.cur_level = True
-                await self.moninj_connection_rpc.inject(channel, TTLOverride.level.value, 1)
-                await self.moninj_connection_rpc.inject(channel, TTLOverride.oe.value, 1)
-                await self.moninj_connection_rpc.inject(channel, TTLOverride.en.value, 1)
-            elif mode == "exp":
-                widget.cur_override = False
-                await self.moninj_connection_rpc.inject(channel, TTLOverride.en.value, 0)
-            else:
-                raise ValueError
-            # override state may have changed
-            widget.refresh_display()
-
-    async def setup_ttl_monitoring(self, enable, channel):
-        if self.moninj_connection_rpc is not None:
-            await self.moninj_connection_rpc.monitor_probe(enable, channel, TTLProbe.level.value)
-            await self.moninj_connection_rpc.monitor_probe(enable, channel, TTLProbe.oe.value)
-            await self.moninj_connection_rpc.monitor_injection(enable, channel, TTLOverride.en.value)
-            await self.moninj_connection_rpc.monitor_injection(enable, channel, TTLOverride.level.value)
-            if enable:
-                await self.moninj_connection_rpc.get_injection_status(channel, TTLOverride.en.value)
-
-    async def setup_dds_monitoring(self, enable, bus_channel, channel):
-        if self.moninj_connection_rpc is not None:
-            await self.moninj_connection_rpc.monitor_probe(enable, bus_channel, channel)
-
-    async def setup_dac_monitoring(self, enable, spi_channel, channel):
-        if self.moninj_connection_rpc is not None:
-            await self.moninj_connection_rpc.monitor_probe(enable, spi_channel, channel)
+            set_connection(proxy_moninj_server, proxy_moninj_pubsub_port, proxy_moninj_rpc_port)
+        for uid, comment, klass, arguments in new_desc - self.description:
+            widget = klass(self, *arguments)
+            if comment:
+                widget.setToolTip(comment)
+            await self.docks[klass].add(uid, widget)
+        for uid, _, klass, _ in self.description - new_desc:
+            await self.docks[klass].remove_by_uid(uid)
+        self.description = new_desc
 
     def monitor_cb(self, channel, probe, value):
-        ttl = self.docks["TTL"]
-        dds = self.docks["DDS"]
-        dac = self.docks["DAC"]
-        if channel in ttl.widgets:
-            widget = ttl.widgets[channel]
+        if widget := self.docks[TTLWidget].get_by_key(channel):
             if probe == TTLProbe.level.value:
                 widget.cur_level = bool(value)
             elif probe == TTLProbe.oe.value:
                 widget.cur_oe = bool(value)
             widget.refresh_display()
-        if (channel, probe) in dds.widgets:
-            widget = dds.widgets[(channel, probe)]
+        if widget := self.docks[DDSWidget].get_by_key((channel, probe)):
             widget.cur_frequency = value * self.dds_sysclk / 2 ** 32
             widget.refresh_display()
-        if (channel, probe) in dac.widgets:
-            widget = dac.widgets[(channel, probe)]
+        if widget := self.docks[DACWidget].get_by_key((channel, probe)):
             widget.cur_value = value
             widget.refresh_display()
 
     def injection_status_cb(self, channel, override, value):
-        ttl = self.docks["TTL"]
-        if channel in ttl.widgets:
-            widget = ttl.widgets[channel]
+        if widget := self.docks[TTLWidget].get_by_key(channel):
             if override == TTLOverride.en.value:
                 widget.cur_override = bool(value)
             if override == TTLOverride.level.value:
@@ -186,7 +114,7 @@ class DeviceManager:
 
     def disconnect_cb(self):
         logger.error("lost connection to core device moninj")
-        self.reconnect_core.set()
+        self.reconnect_signal.set()
 
     def replay_snapshots(self, data):
         self._backstore = data
@@ -199,10 +127,9 @@ class DeviceManager:
         return self._backstore
 
     def on_notify(self, mod):
-        target = self._backstore
-
         if mod["action"] == "setitem":
             path_, key_, value_ = mod["path"], mod["key"], mod["value"]
+            target = self._backstore
             for key in path_:
                 target = target[key]
             if 'injection_status' in path_ and len(path_) > 1:
@@ -210,18 +137,20 @@ class DeviceManager:
             if 'monitor' in path_ and len(path_) > 1:
                 self.monitor_cb(path_[-1], key_, value_)
             if 'connected' in path_:
-                if (key_ == 'coredev' or key_ == 'master') and not value_:
+                if (key_ in ['coredev', 'master']) and not value_:
                     self.disconnect_cb()
 
-    def control_widgets(self, enabled):
-        for widget in chain(*[x.widgets.values() for x in self.docks.values()]):
-            widget.setEnabled(enabled)
-            widget.refresh_display()
-
     async def moninj_connector(self):
+        async def init_connection(pubsub, rpc):
+            self.moninj_connection_pubsub = pubsub
+            self.moninj_connection_rpc = rpc
+            for widget in self.widgets:
+                await widget.setup_monitoring(True)
+                widget.setEnabled(True)
+
         while True:
-            await self.reconnect_core.wait()
-            self.reconnect_core.clear()
+            await self.reconnect_signal.wait()
+            self.reconnect_signal.clear()
             self._reset_connection_state()
             # if there is no moninj server defined, just stop connecting
             if self.proxy_moninj_server is None:
@@ -239,9 +168,9 @@ class DeviceManager:
             except:
                 logger.error("failed to connect to core device moninj", exc_info=True)
                 await asyncio.sleep(10.)
-                self.reconnect_core.set()
+                self.reconnect_signal.set()
             else:
-                await self._init_connection(new_moninj_pubsub, new_moninj_rpc)
+                await init_connection(new_moninj_pubsub, new_moninj_rpc)
 
     async def close(self):
         self.moninj_connector_task.cancel()
@@ -249,33 +178,20 @@ class DeviceManager:
             await asyncio.wait_for(self.moninj_connector_task, None)
         except asyncio.CancelledError:
             pass
-        asyncio.ensure_future(self.ensure_connection_closed())
-
-    async def ensure_connection_closed(self):
-        if self.moninj_connection_pubsub is not None:
-            asyncio.ensure_future(self.moninj_connection_pubsub.close())
-        if self.moninj_connection_rpc is not None:
-            asyncio.ensure_future(self.moninj_connection_rpc.close())
-
-    async def _init_connection(self, pubsub, rpc):
-        self.moninj_connection_pubsub = pubsub
-        self.moninj_connection_rpc = rpc
-        for ttl_channel in self.docks["TTL"].widgets.keys():
-            await self.setup_ttl_monitoring(True, ttl_channel)
-        for bus_channel, channel in self.docks["DDS"].widgets.keys():
-            await self.setup_dds_monitoring(True, bus_channel, channel)
-        for spi_channel, channel in self.docks["DAC"].widgets.keys():
-            await self.setup_dac_monitoring(True, spi_channel, channel)
-        self.control_widgets(enabled=True)
-
-    def _set_connection(self, moninj_serv, pubsub_port, rpc_port):
-        self.proxy_moninj_server = moninj_serv
-        self.proxy_moninj_pubsub_port = pubsub_port
-        self.proxy_moninj_rpc_port = rpc_port
-        self.reconnect_core.set()
+        self._reset_connection_state()
 
     def _reset_connection_state(self):
-        asyncio.ensure_future(self.ensure_connection_closed())
+        async def ensure_connection_closed():
+            if self.moninj_connection_pubsub is not None:
+                asyncio.ensure_future(self.moninj_connection_pubsub.close())
+            if self.moninj_connection_rpc is not None:
+                asyncio.ensure_future(self.moninj_connection_rpc.close())
+        asyncio.ensure_future(ensure_connection_closed())
         self.moninj_connection_pubsub = None
         self.moninj_connection_rpc = None
-        self.control_widgets(enabled=False)
+        for widget in self.widgets:
+            widget.setEnabled(False)
+
+    @property
+    def widgets(self):
+        return chain.from_iterable(x.values() for x in self.docks.values())
