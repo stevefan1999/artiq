@@ -4,15 +4,14 @@ from collections import namedtuple
 from itertools import chain
 
 from PyQt5 import QtWidgets
+from sipyco.sync_struct import Subscriber
 from sipyco.pc_rpc import AsyncioClient
 
-from sipyco.sync_struct import Subscriber
-
-from artiq.gui.flowlayout import FlowLayout
-
+from artiq.coredevice.comm_moninj import CommMonInj
 from artiq.dashboard.moninj_widgets.dac import DACWidget
 from artiq.dashboard.moninj_widgets.dds import DDSWidget
 from artiq.dashboard.moninj_widgets.ttl import TTLWidget
+from artiq.gui.flowlayout import FlowLayout
 
 logger = logging.getLogger(__name__)
 
@@ -23,23 +22,23 @@ class _WidgetContainer:
         self._widgets = dict()
         self._widgets_by_uid = dict()
 
-    async def remove_by_widget(self, widget):
+    def remove_by_widget(self, widget):
         widget.deleteLater()
-        await widget.setup_monitoring(False)
+        widget.setup_monitoring(False)
         del self._widgets_by_uid[next(uid for uid, wkey in self._widgets_by_uid.items() if wkey == widget.sort_key)]
         del self._widgets[widget.sort_key]
         self.setup_layout(self._widgets.values())
 
-    async def remove_by_key(self, key):
-        await self.remove_by_widget(self._widgets[key])
+    def remove_by_key(self, key):
+        self.remove_by_widget(self._widgets[key])
 
-    async def remove_by_uid(self, uid):
-        await self.remove_by_key(self._widgets_by_uid[uid])
+    def remove_by_uid(self, uid):
+        self.remove_by_key(self._widgets_by_uid[uid])
 
-    async def add(self, uid, widget):
+    def add(self, uid, widget):
         self._widgets_by_uid[uid] = widget.sort_key
         self._widgets[widget.sort_key] = widget
-        await widget.setup_monitoring(True)
+        widget.setup_monitoring(True)
         self.setup_layout(self._widgets.values())
 
     def get_by_key(self, key):
@@ -145,12 +144,12 @@ class _DeviceManager:
             self.moninj_port_rpc = moninj_port_rpc
             self.reconnect_core.set()
         for uid, _, klass, _ in self.description - new_desc:
-            await self.docks[klass].remove_by_uid(uid)
+            self.docks[klass].remove_by_uid(uid)
         for uid, comment, klass, arguments in new_desc - self.description:
             widget = klass(self, *arguments)
             if comment:
                 widget.setToolTip(comment)
-            await self.docks[klass].add(uid, widget)
+            self.docks[klass].add(uid, widget)
         self.description = new_desc
 
     def monitor_cb(self, channel, probe, value):
@@ -209,7 +208,7 @@ class _DeviceManager:
                     await self._proxy_rpc_init()
                 logger.info("connected to moninj proxy")
                 for widget in self.widgets:
-                    await widget.setup_monitoring(True)
+                    widget.setup_monitoring(True)
                     widget.setEnabled(True)
 
     async def _proxy_rpc_init(self):
@@ -243,30 +242,6 @@ class _DeviceManager:
             self.healthcheck_task = None
         for widget in self.widgets:
             widget.setEnabled(False)
-
-    def replay_snapshots(self, data):
-        self.proxy_sync_data = data
-        for channel, chan_data in data["monitor"].items():
-            for probe, value in chan_data.items():
-                self.monitor_cb(channel, probe, value)
-        for channel, chan_data in data["injection_status"].items():
-            for override, value in chan_data.items():
-                self.injection_status_cb(channel, override, value)
-        return self.proxy_sync_data
-
-    def on_notify(self, mod):
-        if mod["action"] == "setitem":
-            path_, key_, value_ = mod["path"], mod["key"], mod["value"]
-            target = self.proxy_sync_data
-            for key in path_:
-                target = target[key]
-            if 'injection_status' in path_ and len(path_) > 1:
-                self.injection_status_cb(path_[-1], key_, value_)
-            if 'monitor' in path_ and len(path_) > 1:
-                self.monitor_cb(path_[-1], key_, value_)
-            if 'connected' in path_:
-                if (key_ in ['coredev', 'master']) and not value_:
-                    self.disconnect_cb()
 
     @property
     def widgets(self):
