@@ -87,14 +87,23 @@ class CommMonInj:
                     payload = await self._reader.readexactly(9)
                     channel, probe, value = struct.unpack(
                         self.endian + "lbl", payload)
-                    self.monitor_cb(channel, probe, value)
+                    if asyncio.iscoroutinefunction(self.monitor_cb):
+                        await self.monitor_cb(channel, probe, value)
+                    else:
+                        self.monitor_cb(channel, probe, value)
                 elif ty == b"\x01":
                     payload = await self._reader.readexactly(6)
                     channel, override, value = struct.unpack(
                         self.endian + "lbb", payload)
-                    self.injection_status_cb(channel, override, value)
+                    if asyncio.iscoroutinefunction(self.injection_status_cb):
+                        await self.injection_status_cb(channel, override, value)
+                    else:
+                        self.injection_status_cb(channel, override, value)
                 else:
                     raise ValueError("Unknown packet type", ty)
+        except BaseException as e:
+            print(e)
+            raise
         finally:
             if self.disconnect_cb is not None:
                 self.disconnect_cb()
