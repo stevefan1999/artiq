@@ -84,12 +84,12 @@ class TTLWidget(MoninjWidget):
     def override_toggled(self, override):
         if self.programmatic_change:
             return
-        self.set_mode(("1" if self.level.isChecked() else "0") if override else "exp")
+        self.set_mode(self.channel, ("1" if self.level.isChecked() else "0") if override else "exp")
 
     def level_toggled(self, level):
         if self.programmatic_change:
             return
-        self.set_mode("1" if level else "0")
+        self.set_mode(self.channel, "1" if level else "0")
 
     def refresh_display(self):
         level = self.cur_override_level if self.cur_override else self.cur_level
@@ -125,23 +125,23 @@ class TTLWidget(MoninjWidget):
             if enable:
                 conn.get_injection_status(self.channel, TTLOverride.en.value)
 
-    def set_mode(self, mode):
+    def set_mode(self, channel, mode):
         if conn := self.dm.comm:
             if mode == "0":
                 self.cur_override = True
                 self.cur_level = False
-                conn.inject(self.channel, TTLOverride.level.value, 0)
-                conn.inject(self.channel, TTLOverride.oe.value, 1)
-                conn.inject(self.channel, TTLOverride.en.value, 1)
+                conn.inject(channel, TTLOverride.level.value, 0)
+                conn.inject(channel, TTLOverride.oe.value, 1)
+                conn.inject(channel, TTLOverride.en.value, 1)
             elif mode == "1":
                 self.cur_override = True
                 self.cur_level = True
-                conn.inject(self.channel, TTLOverride.level.value, 1)
-                conn.inject(self.channel, TTLOverride.oe.value, 1)
-                conn.inject(self.channel, TTLOverride.en.value, 1)
+                conn.inject(channel, TTLOverride.level.value, 1)
+                conn.inject(channel, TTLOverride.oe.value, 1)
+                conn.inject(channel, TTLOverride.en.value, 1)
             elif mode == "exp":
                 self.cur_override = False
-                conn.inject(self.channel, TTLOverride.en.value, 0)
+                conn.inject(channel, TTLOverride.en.value, 0)
             else:
                 raise ValueError
             # override state may have changed

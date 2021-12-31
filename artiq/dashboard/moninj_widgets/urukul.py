@@ -6,12 +6,13 @@ from numpy import int64
 
 from artiq.coredevice.ad9910 import AD9910_REG_PROFILE0, AD9910_REG_PROFILE7, AD9910_REG_FTW, AD9910_REG_ASF
 from artiq.coredevice.ad9912_reg import AD9912_POW1
+from artiq.dashboard.moninj_widgets import MoninjWidget
+from artiq.dashboard.moninj_widgets.ttl import TTLWidget
 from artiq.gui.tools import LayoutWidget
 from artiq.language.environment import ProcessArgumentManager
 from artiq.language.units import MHz
 from artiq.master import worker_db
-from artiq.dashboard.moninj.widgets.experiments.urukul_freq_set import UrukulFreqSet
-
+from artiq.dashboard.moninj_widgets.urukul.urukul_freq_set import UrukulFreqSet
 
 
 class LocalDeviceDB:
@@ -29,9 +30,9 @@ class LocalDeviceDB:
         return desc
 
 
-class UrukulWidget(QFrame):
+class UrukulWidget(MoninjWidget):
     def __init__(self, dm, bus_channel, channel, title, sw_channel, ref_clk, pll, is_9910, clk_div=0):
-        QFrame.__init__(self)
+        MoninjWidget.__init__(self)
         self.setStyleSheet("""
 QLineEdit[enable="false"] {
     color: #808080; 
@@ -43,14 +44,14 @@ QLineEdit[enable="false"] {
         self.channel = channel
         self.worker_dm = worker_db.DeviceManager(LocalDeviceDB(dm.ddb))
         self.set_on_off = dm.ttl_set_mode  # todo
-        self.urukul_set_override = dm.urukul_set_override
-        self.urukul_write = dm.urukul_write
+        self.dm = dm
         self.title = title
         self.sw_channel = sw_channel
         self.ref_clk = ref_clk
         self.pll = pll
         self.is_9910 = is_9910
         self.clk_div = clk_div
+        self.set_mode = TTLWidget.set_mode
 
         self.setFrameShape(QFrame.Box)
         self.setFrameShadow(QFrame.Raised)
@@ -122,9 +123,9 @@ QLineEdit[enable="false"] {
         grid.setRowStretch(4, 1)
 
         self.programmatic_change = False
-        self.override.clicked.connect(lambda override: asyncio.ensure_future(self.override_toggled(override)))
-        self.level.clicked.connect(lambda toggled: asyncio.ensure_future(self.level_toggled(toggled)))
-        self.freq_edit.returnPressed.connect(lambda: asyncio.ensure_future(self.frequency_edited()))
+        self.override.clicked.connect(self.override_toggled)
+        self.level.clicked.connect(self.level_toggled)
+        self.freq_edit.returnPressed.connect(self.frequency_edited)
 
         self.cur_level = False
         self.cur_override = False
@@ -134,45 +135,36 @@ QLineEdit[enable="false"] {
         self.cur_reg = 0
         self.cur_data_high = 0
         self.cur_data_low = 0
-        if is_9910:
-            self.ftw_per_hz = (1 << 32) / (ref_clk / [4, 1, 2, 4][clk_div] * pll)
-        else:
-            self.ftw_per_hz = (1 << 48) / (ref_clk / [1, 1, 2, 4][clk_div] * pll)
+
+        max_freq, clk_mult = (1 << 32, [4, 1, 2, 4]) if is_9910 else (1 << 48, [1, 1, 2, 4])
+        sysclk = ref_clk / clk_mult[clk_div] * pll
+        self.ftw_per_hz = 1 / sysclk * max_freq
         self.refresh_display()
 
     def enterEvent(self, event):
         self.stack.setCurrentIndex(1)
         self.freq_stack.setCurrentIndex(1)
-        QFrame.enterEvent(self, event)
+        super().enterEvent(event)
 
     def leaveEvent(self, event):
         self.stack.setCurrentIndex(0)
         self.freq_stack.setCurrentIndex(0)
-        QFrame.leaveEvent(self, event)
+        super().leaveEvent(event)
 
-    async def override_toggled(self, override):
+    def override_toggled(self, override):
         if self.programmatic_change:
             return
-        await self.urukul_set_override(self.bus_channel, override)
-        self.freq_edit.setReadOnly(not override)
-        self.freq_edit.setEnabled(override)
-        if override:
-            if self.level.isChecked():
-                await self.set_on_off(self.sw_channel, "1")
-            else:
-                await self.set_on_off(self.sw_channel, "0")
-        else:
-            await self.set_on_off(self.sw_channel, "exp")
-        self.cur_override_level = override
+        if conn := self.dm.conn:
+            self.freq_edit.setReadOnly(not override)
+            self.freq_edit.setEnabled(override)
+            conn.inject(self.bus_channel, 0, int(override))
+            self.set_mode(self, self.sw_channel, ("1" if self.level.isChecked() else "0") if override else "exp")
 
-    async def level_toggled(self, level):
+    def level_toggled(self, level):
         if self.programmatic_change:
             return
         if self.override.isChecked():
-            if level:
-                await self.set_on_off(self.sw_channel, "1")
-            else:
-                await self.set_on_off(self.sw_channel, "0")
+            self.set_mode(self, self.sw_channel, "1" if level else "0")
 
     def update_reg(self, reg):
         if self.is_9910:
@@ -204,7 +196,7 @@ QLineEdit[enable="false"] {
                 self.cur_frequency += self._ftw_to_freq(int64(data & 0xffffffff))
         # print(self.cur_frequency)
 
-    async def frequency_edited(self):
+    def frequency_edited(self):
         freq = float(self.freq_edit.text()) * MHz
         self.cur_frequency = freq
         print("frequency edited: ", freq)
@@ -248,5 +240,18 @@ QLineEdit[enable="false"] {
         finally:
             self.programmatic_change = False
 
+    @property
     def sort_key(self):
         return self.bus_channel, self.channel
+
+    def setup_monitoring(self, enable):
+        if conn := self.dm.conn:
+            conn.monitor_probe(enable, self.bus_channel, self.channel)  # register addresses
+            conn.monitor_probe(enable, self.bus_channel, self.channel + 4)  # first data
+            conn.monitor_probe(enable, self.bus_channel, self.channel + 8)  # second data
+            if self.channel == 0:
+                conn.monitor_injection(enable, self.bus_channel, 0)
+                conn.monitor_injection(enable, self.bus_channel, 1)
+                conn.monitor_injection(enable, self.bus_channel, 2)
+                if enable:
+                    conn.get_injection_status(self.bus_channel, 0)
