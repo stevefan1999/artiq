@@ -85,7 +85,8 @@ def setup_from_ddb(ddb):
                         spi_device = ddb[spi_device]
                     spi_channel = spi_device["arguments"]["channel"]
                     for channel in range(32):
-                        widget = _WidgetDesc((k, channel), comment, DACWidget, (spi_channel, channel, k))
+                        widget = _WidgetDesc((k, channel), comment, DACWidget,
+                                             (spi_channel, channel, k))
                         description.add(widget)
 
                 if module_ == "artiq.coredevice.ttl":
