@@ -11,6 +11,7 @@ from artiq.coredevice.comm_moninj import CommMonInj
 from artiq.dashboard.moninj_widgets.dac import DACWidget
 from artiq.dashboard.moninj_widgets.dds import DDSWidget
 from artiq.dashboard.moninj_widgets.ttl import TTLWidget
+from artiq.dashboard.moninj_widgets.urukul import UrukulWidget
 from artiq.gui.flowlayout import FlowLayout
 
 logger = logging.getLogger(__name__)
@@ -78,8 +79,21 @@ def setup_from_ddb(ddb):
 
             if v["type"] == "local":
                 args, module_, class_ = v["arguments"], v["module"], v["class"]
-
-                def handle_spi():
+                is_ad9910 = module_ == "artiq.coredevice.ad9910" and class_ == "AD9910"
+                is_ad9912 = module_ == "artiq.coredevice.ad9912" and class_ == "AD9912"
+                is_ad9914 = module_ == "artiq.coredevice.ad9914" and class_ == "AD9914"
+                is_ad53xx = module_ == "artiq.coredevice.ad53xx" and class_ == "AD53XX"
+                is_zotino = module_ == "artiq.coredevice.zotino" and class_ == "Zotino"
+                if module_ == "artiq.coredevice.ttl":
+                    channel = args["channel"]
+                    description.add(_WidgetDesc(k, comment, TTLWidget, (
+                        channel, class_ == "TTLOut", k)))
+                elif is_ad9914:
+                    dds_sysclk, bus_channel, channel = args["sysclk"], args[
+                        "bus_channel"], args["channel"]
+                    description.add(_WidgetDesc(k, comment, DDSWidget,
+                                                (bus_channel, channel, k)))
+                elif is_ad53xx or is_zotino:
                     spi_device = ddb[args["spi_device"]]
                     while isinstance(spi_device, str):
                         spi_device = ddb[spi_device]
@@ -88,17 +102,17 @@ def setup_from_ddb(ddb):
                         widget = _WidgetDesc((k, channel), comment, DACWidget,
                                              (spi_channel, channel, k))
                         description.add(widget)
-
-                if module_ == "artiq.coredevice.ttl":
-                    channel = args["channel"]
-                    description.add(_WidgetDesc(k, comment, TTLWidget, (channel, class_ == "TTLOut", k)))
-                elif module_ == "artiq.coredevice.ad9914" and class_ == "AD9914":
-                    dds_sysclk, bus_channel, channel = args["sysclk"], args["bus_channel"], args["channel"]
-                    description.add(_WidgetDesc(k, comment, DDSWidget, (bus_channel, channel, k)))
-                elif module_ == "artiq.coredevice.ad53xx" and class_ == "AD53XX":
-                    handle_spi()
-                elif module_ == "artiq.coredevice.zotino" and class_ == "Zotino":
-                    handle_spi()
+                elif is_ad9910 or is_ad9912:
+                    urukul_device = ddb[args["cpld_device"]]
+                    sw_channel = ddb[args["sw_device"]]["arguments"]["channel"]
+                    channel = args["chip_select"] - 4
+                    pll = args["pll_n"]
+                    refclk = urukul_device["arguments"]["refclk"]
+                    spi_device = ddb[urukul_device["arguments"]["spi_device"]]
+                    spi_channel = spi_device["arguments"]["channel"]
+                    widget = _WidgetDesc(k, comment, UrukulWidget,
+                                         (spi_channel, channel, k, sw_channel, refclk, pll, is_ad9910))
+                    description.add(widget)
         except KeyError:
             pass
     if proxy_addr and proxy_port:
@@ -284,12 +298,18 @@ class MonInj:
         self.ttl_dock = _MonInjDock("TTL")
         self.dds_dock = _MonInjDock("DDS")
         self.dac_dock = _MonInjDock("DAC")
+        self.urukul_dock = _MonInjDock("Urukul")
 
         self.dm = _DeviceManager()
         self.dm.docks.update({
-            TTLWidget: _WidgetContainer(lambda x: self.ttl_dock.layout_widgets(x)),
-            DDSWidget: _WidgetContainer(lambda x: self.dds_dock.layout_widgets(x)),
-            DACWidget: _WidgetContainer(lambda x: self.dac_dock.layout_widgets(x))
+            TTLWidget: _WidgetContainer(
+                lambda x: self.ttl_dock.layout_widgets(x)),
+            DDSWidget: _WidgetContainer(
+                lambda x: self.dds_dock.layout_widgets(x)),
+            DACWidget: _WidgetContainer(
+                lambda x: self.dac_dock.layout_widgets(x)),
+            UrukulWidget: _WidgetContainer(
+                lambda x: self.urukul_dock.layout_widgets(x))
         })
 
         self.subscriber = Subscriber("devices", self.dm.init_ddb, self.dm.notify)

@@ -19,7 +19,7 @@ class UrukulFreqSet(EnvExperiment):
 
     @kernel
     def set_urukul_freq(self, channel, frequency):
-        # self.core.break_realtime()
+        self.core.break_realtime()
         channel.cpld.init()
         channel.init()
         channel.set(frequency)

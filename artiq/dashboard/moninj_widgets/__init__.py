@@ -1,7 +1,6 @@
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QFrame, QGridLayout, QLabel
 
-
 class MoninjWidget(QFrame):
     def setup_monitoring(self, enabled): raise NotImplementedError
 

@@ -36,7 +36,7 @@ class _Client:
 
     def write_injection_status(self, channel, override, value, endian):
         # InjectionStatus
-        packet = struct.pack(endian + "blbb", 1, channel, override, value)
+        packet = struct.pack(endian + "blbl", 1, channel, override, value)
         self.writer.write(packet)
 
 
@@ -290,7 +290,7 @@ class MonInjProxy(AsyncioServer):
                                       client=client)
                 elif opcode == b"\x01":
                     channel, override, value = await client.read_format(
-                        self.core.comm.endian + "lbb")
+                        self.endian + "lbl")
                     logger.debug(
                         f"received Inject {(channel, override, value)}")
                     self.core.comm.inject(channel, override, value)
