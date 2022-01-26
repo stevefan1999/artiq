@@ -1,6 +1,6 @@
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QFrame, QLabel, QGridLayout, QSizePolicy, \
-    QStackedWidget, QToolButton, QLineEdit
+    QStackedWidget, QToolButton
 from numpy import int64
 
 from artiq.coredevice.ad9910 import AD9910_REG_PROFILE0, AD9910_REG_PROFILE7, \
@@ -9,40 +9,13 @@ from artiq.coredevice.ad9912_reg import AD9912_POW1
 from artiq.dashboard.moninj_widgets import MoninjWidget
 from artiq.dashboard.moninj_widgets.ttl import TTLWidget
 from artiq.gui.tools import LayoutWidget
-from artiq.language.environment import ProcessArgumentManager
 from artiq.language.units import MHz
-from artiq.master import worker_db
-from .urukul_freq_set import UrukulFreqSet
-
-
-class LocalDeviceDB:
-    def __init__(self, data):
-        self.data = data
-
-    def get_device_db(self):
-        return self.data
-
-    def get(self, key, resolve_alias=False):
-        desc = self.data[key]
-        if resolve_alias:
-            while isinstance(desc, str):
-                desc = self.data[desc]
-        return desc
-
 
 class UrukulWidget(MoninjWidget):
     def __init__(self, dm, bus_channel, channel, title, sw_channel, ref_clk, pll, is_9910, clk_div=0):
         MoninjWidget.__init__(self)
-        self.setStyleSheet("""
-QLineEdit[enable="false"] {
-    color: #808080; 
-    background-color: #F0F0F0;
-}
-        """)
-
         self.bus_channel = bus_channel
         self.channel = channel
-        self.worker_dm = worker_db.DeviceManager(LocalDeviceDB(dm.ddb))
         self.dm = dm
         self.title = title
         self.sw_channel = sw_channel
@@ -93,20 +66,10 @@ QLineEdit[enable="false"] {
         grid_freq.addWidget(self.freq_stack, 1, 1)
         self.freq_label = QLabel()
         self.freq_label.setAlignment(Qt.AlignCenter)
-        # self.freq_label.setMaximumWidth(100)
-        # self.freq_label.setSizePolicy(QtWidgets.QSizePolicy.Ignored,
-        #                               QtWidgets.QSizePolicy.Preferred)
+        self.freq_label.setMaximumWidth(100)
+        self.freq_label.setSizePolicy(QSizePolicy.Ignored,
+                                      QSizePolicy.Preferred)
         self.freq_stack.addWidget(self.freq_label)
-        self.freq_edit = QLineEdit()
-        self.freq_edit.setAlignment(Qt.AlignCenter)
-        # self.freq_edit.setInputMask("0.0000")
-        self.freq_edit.setReadOnly(False)
-        self.freq_edit.setEnabled(True)
-        # self.freq_edit.setTextMargins(0, 0, 0, 0)
-        self.freq_edit.setSizePolicy(QSizePolicy.Ignored,
-                                     QSizePolicy.Preferred)
-        # self.freq_edit.setMaximumWidth(100)
-        self.freq_stack.addWidget(self.freq_edit)
         unit = QLabel()
         unit.setAlignment(Qt.AlignCenter)
         unit.setText('<font size="2">  MHz</font>')
@@ -123,7 +86,6 @@ QLineEdit[enable="false"] {
         self.programmatic_change = False
         self.override.clicked.connect(self.override_toggled)
         self.level.clicked.connect(self.level_toggled)
-        self.freq_edit.returnPressed.connect(self.frequency_edited)
 
         self.cur_level = False
         self.cur_override = False
@@ -152,9 +114,8 @@ QLineEdit[enable="false"] {
     def override_toggled(self, override):
         if self.programmatic_change:
             return
-        if comm := self.dm.comm:
-            self.freq_edit.setReadOnly(not override)
-            self.freq_edit.setEnabled(override)
+        comm = self.dm.comm
+        if comm:
             comm.inject(self.bus_channel, 0, int(override))
             TTLWidget.set_mode(self, ("1" if self.level.isChecked() else "0") if override else "exp", channel=self.sw_channel)
 
@@ -179,7 +140,6 @@ QLineEdit[enable="false"] {
             if self.cur_reg == AD9912_POW1:
                 ftw = int64((data & 0xffff)) << 32
                 self.cur_frequency = self._ftw_to_freq(ftw)
-        # print(self.cur_frequency)
 
     def update_data_low(self, data):
         if self.is_9910:
@@ -192,18 +152,6 @@ QLineEdit[enable="false"] {
             if self.cur_reg == AD9912_POW1:
                 # mask to avoid improper sign extension
                 self.cur_frequency += self._ftw_to_freq(int64(data & 0xffffffff))
-        # print(self.cur_frequency)
-
-    def frequency_edited(self):
-        freq = float(self.freq_edit.text()) * MHz
-        self.cur_frequency = freq
-        print("frequency edited: ", freq)
-
-        args = {"chan": self.title, 'freq': freq}
-        argument_mgr = ProcessArgumentManager(args)
-        experiment = UrukulFreqSet((self.worker_dm, None, argument_mgr, None))
-        experiment.prepare()
-        experiment.run()
 
     def _ftw_to_freq(self, ftw):
         return ftw / self.ftw_per_hz
@@ -213,7 +161,6 @@ QLineEdit[enable="false"] {
         return asf / float(0x3ffe)  # coredevice.ad9912 doesn't allow amplitude control so only need to worry about 9910
 
     def refresh_display(self):
-        # print(self.cur_reg, self.cur_frequency, self.cur_amp)
         on_off = self.cur_override_level if self.cur_override else self.cur_level
         on_off_s = "ON" if on_off else "OFF"
 
@@ -222,12 +169,8 @@ QLineEdit[enable="false"] {
             color = ' color="red"'
         else:
             color = ""
-
         self.on_off_label.setText(f'<font size="2">{on_off_s}</font>')
-
-        self.freq_label.setText(f'<font size="4"{color}>{self.cur_frequency / 1e6:.4f}</font>')
-        self.freq_edit.setText("{:.4f}".format(self.cur_frequency / 1e6))
-
+        self.freq_label.setText(f'<font size="4"{color}>{self.cur_frequency / MHz:.3f}</font>')
         self.programmatic_change = True
         try:
             self.override.setChecked(self.cur_override)
@@ -243,7 +186,8 @@ QLineEdit[enable="false"] {
         return self.bus_channel, self.channel
 
     def setup_monitoring(self, enable):
-        if comm := self.dm.comm:
+        comm = self.dm.comm
+        if comm:
             comm.monitor_probe(enable, self.bus_channel, self.channel)  # register addresses
             comm.monitor_probe(enable, self.bus_channel, self.channel + 4)  # first data
             comm.monitor_probe(enable, self.bus_channel, self.channel + 8)  # second data
