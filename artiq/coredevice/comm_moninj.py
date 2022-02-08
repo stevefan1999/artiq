@@ -101,9 +101,6 @@ class CommMonInj:
                         self.injection_status_cb(channel, override, value)
                 else:
                     raise ValueError("Unknown packet type", ty)
-        except BaseException as e:
-            print(e)
-            raise
         finally:
             if self.disconnect_cb is not None:
                 self.disconnect_cb()
