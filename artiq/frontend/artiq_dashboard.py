@@ -183,9 +183,9 @@ def main():
     smgr.register(d_applets)
     broadcast_clients["ccb"].notify_cbs.append(d_applets.ccb_notify)
 
-    d_ttl_dds = moninj.MonInj()
-    loop.run_until_complete(d_ttl_dds.start(args.server, args.port_notify))
-    atexit_register_coroutine(d_ttl_dds.stop)
+    d_moninj = moninj.MonInj()
+    loop.run_until_complete(d_moninj.start(args.server, args.port_notify))
+    atexit_register_coroutine(d_moninj.stop)
 
     d_schedule = schedule.ScheduleDock(
         rpc_clients["schedule"], sub_clients["schedule"])
@@ -197,12 +197,7 @@ def main():
     widget_log_handler.callback = logmgr.append_message
 
     # lay out docks
-    right_docks = [
-        d_explorer, d_shortcuts,
-        d_ttl_dds.ttl_dock, d_ttl_dds.dds_dock, d_ttl_dds.dac_dock,
-        d_ttl_dds.urukul_dock,
-        d_datasets, d_applets
-    ]
+    right_docks = [d_explorer, d_shortcuts, d_datasets, d_applets]
     main_window.addDockWidget(QtCore.Qt.RightDockWidgetArea, right_docks[0])
     for d1, d2 in zip(right_docks, right_docks[1:]):
         main_window.tabifyDockWidget(d1, d2)
@@ -217,10 +212,6 @@ def main():
     smgr.load()
     smgr.start()
     atexit_register_coroutine(smgr.stop)
-
-    # work around for https://github.com/m-labs/artiq/issues/1307
-    d_ttl_dds.ttl_dock.show()
-    d_ttl_dds.dds_dock.show()
 
     # create first log dock if not already in state
     d_log0 = logmgr.first_log_dock()

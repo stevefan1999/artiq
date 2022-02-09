@@ -4,6 +4,8 @@ from collections import namedtuple
 from itertools import chain
 
 from PyQt5 import QtWidgets
+from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import QMainWindow, QApplication, QDockWidget
 from sipyco.sync_struct import Subscriber
 from sipyco.pc_rpc import AsyncioClient
 
@@ -16,6 +18,11 @@ from artiq.gui.flowlayout import FlowLayout
 
 logger = logging.getLogger(__name__)
 
+
+def get_main_window():
+    top_level = QApplication.instance().topLevelWidgets()
+    return next((widget for widget in top_level if
+                        isinstance(widget, QMainWindow)), None)
 
 class _WidgetContainer:
     def __init__(self, setup_layout=lambda x: None):
@@ -51,6 +58,23 @@ class _WidgetContainer:
     def values(self):
         return self._widgets.values()
 
+    def show(self):
+        main_window = get_main_window()
+        if main_window:
+            docks = main_window.findChildren(QDockWidget)
+            first_right_dock = next(
+                (dock for dock in docks if main_window.dockWidgetArea(dock) == Qt.RightDockWidgetArea),
+                None
+            )
+            if first_right_dock is not None:
+                main_window.tabifyDockWidget(first_right_dock, self.dock)
+            else:
+                main_window.addDockWidget(Qt.RightDockWidgetArea, self.dock)
+
+    def hide(self):
+        main_window = get_main_window()
+        if main_window:
+            main_window.removeDockWidget(self.dock)
 
 _WidgetDesc = namedtuple("_WidgetDesc", "uid comment cls arguments")
 
@@ -168,6 +192,11 @@ class _DeviceManager:
                 widget.setToolTip(comment)
             self.docks[klass].add(uid, widget)
         self.description = new_desc
+        for container in self.docks.values():
+            if len(container.values()) > 0:
+                container.show()
+            else:
+                container.hide()
 
     def monitor_cb(self, channel, probe, value):
         for klass, widgets in self.docks.items():
