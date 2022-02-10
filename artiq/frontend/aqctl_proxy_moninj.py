@@ -398,7 +398,7 @@ def get_argparser():
 
 
 class HealthCheckService:
-    def __init__(self, proxy: MonInjProxy):
+    def __init__(self, proxy):
         self.proxy = proxy
 
     def ping(self):
