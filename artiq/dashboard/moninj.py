@@ -25,8 +25,8 @@ def get_main_window():
                         isinstance(widget, QMainWindow)), None)
 
 class _WidgetContainer:
-    def __init__(self, setup_layout=lambda x: None):
-        self.setup_layout = setup_layout
+    def __init__(self, dock):
+        self.dock = dock
         self._widgets = {}
         self._widgets_by_uid = {}
 
@@ -38,7 +38,7 @@ class _WidgetContainer:
         if uid is not None:
             del self._widgets_by_uid[uid]
         del self._widgets[widget.sort_key]
-        self.setup_layout(self._widgets.values())
+        self.dock.layout_widgets(self._widgets.values())
 
     def remove_by_key(self, key):
         self.remove_by_widget(self._widgets[key])
@@ -50,7 +50,7 @@ class _WidgetContainer:
         self._widgets_by_uid[uid] = widget.sort_key
         self._widgets[widget.sort_key] = widget
         widget.setup_monitoring(True)
-        self.setup_layout(self._widgets.values())
+        self.dock.layout_widgets(self._widgets.values())
 
     def get_by_key(self, key):
         return self._widgets.get(key, None)
@@ -324,21 +324,12 @@ class _MonInjDock(QtWidgets.QDockWidget):
 
 class MonInj:
     def __init__(self):
-        self.ttl_dock = _MonInjDock("TTL")
-        self.dds_dock = _MonInjDock("DDS")
-        self.dac_dock = _MonInjDock("DAC")
-        self.urukul_dock = _MonInjDock("Urukul")
-
         self.dm = _DeviceManager()
         self.dm.docks.update({
-            TTLWidget: _WidgetContainer(
-                lambda x: self.ttl_dock.layout_widgets(x)),
-            DDSWidget: _WidgetContainer(
-                lambda x: self.dds_dock.layout_widgets(x)),
-            DACWidget: _WidgetContainer(
-                lambda x: self.dac_dock.layout_widgets(x)),
-            UrukulWidget: _WidgetContainer(
-                lambda x: self.urukul_dock.layout_widgets(x))
+            TTLWidget: _WidgetContainer(_MonInjDock("TTL")),
+            DDSWidget: _WidgetContainer(_MonInjDock("DDS")),
+            DACWidget: _WidgetContainer(_MonInjDock("DAC")),
+            UrukulWidget: _WidgetContainer(_MonInjDock("Urukul"))
         })
 
         self.subscriber = Subscriber("devices", self.dm.init_ddb, self.dm.notify)
