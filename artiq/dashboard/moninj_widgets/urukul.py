@@ -87,16 +87,18 @@ class UrukulWidget(MoninjWidget):
         self.override.toggled.connect(self.refresh_display)
         self.level.toggled.connect(self.refresh_display)
 
-        self.cur_frequency = 0
+        self.cur_frequency_low = 0
+        self.cur_frequency_high = 0
         self.cur_amp = 0
         self.cur_reg = 0
-        self.cur_data_high = 0
-        self.cur_data_low = 0
 
         max_freq, clk_mult = (1 << 32, [4, 1, 2, 4]) if is_9910 else (1 << 48, [1, 1, 2, 4])
         sysclk = ref_clk / clk_mult[clk_div] * pll
         self.ftw_per_hz = 1 / sysclk * max_freq
-        self.refresh_display()
+
+    @property
+    def cur_freq(self):
+        return (self.cur_frequency_low + self.cur_frequency_high) / MHz
 
     def enterEvent(self, event):
         self.stack.setCurrentIndex(1)
@@ -126,20 +128,21 @@ class UrukulWidget(MoninjWidget):
                 self.cur_amp = self._asf_to_amp(asf)
         else:
             if self.cur_reg == AD9912_POW1:
-                ftw = int64((data & 0xffff)) << 32
-                self.cur_frequency = self._ftw_to_freq(ftw)
+                ftw = self._ftw_to_freq(int64(data & 0xffff) << 32)
+                self.cur_frequency_high = ftw
 
     def update_data_low(self, data):
         if self.is_9910:
             if (AD9910_REG_PROFILE0() <= self.cur_reg <= AD9910_REG_PROFILE7() or
                     self.cur_reg == AD9910_REG_FTW()):
-                self.cur_frequency = self._ftw_to_freq(data)
+                self.cur_frequency_low = self._ftw_to_freq(data)
             elif self.cur_reg == AD9910_REG_ASF():
                 self.cur_amp = self._asf_to_amp(data)
         else:
             if self.cur_reg == AD9912_POW1:
                 # mask to avoid improper sign extension
-                self.cur_frequency += self._ftw_to_freq(int64(data & 0xffffffff))
+                ftw = self._ftw_to_freq(int64(data & 0xffffffff))
+                self.cur_frequency_low = ftw
 
     def _ftw_to_freq(self, ftw):
         return ftw / self.ftw_per_hz
@@ -158,7 +161,7 @@ class UrukulWidget(MoninjWidget):
         else:
             color = ""
         self.on_off_label.setText(f'<font size="2">{on_off_s}</font>')
-        self.freq_label.setText(f'<font size="4"{color}>{self.cur_frequency:.3f}</font>')
+        self.freq_label.setText(f'<font size="4"{color}>{self.cur_freq:.3f}</font>')
         if self.override.isChecked():
             self.stack.setCurrentIndex(1)
 
