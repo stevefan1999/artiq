@@ -59,15 +59,18 @@ class TTLWidget(MoninjWidget):
         grid.setRowStretch(3, 1)
         grid.setRowStretch(4, 1)
 
-        self.programmatic_change = False
-        self.override.clicked.connect(self.override_toggled)
-        self.level.clicked.connect(self.level_toggled)
+        self.override.toggled.connect(self.override_toggled)
+        self.override.toggled.connect(self.refresh_display)
 
-        self.cur_level = False
+        self.level.toggled.connect(self.level_toggled)
+        self.level.toggled.connect(self.refresh_display)
+
         self.cur_oe = False
-        self.cur_override = False
         self.cur_override_level = False
-        self.refresh_display()
+
+    @property
+    def cur_level(self):
+        return self.cur_override_level if self.override.isChecked() else self.level.isChecked()
 
     def enterEvent(self, event):
         self.stack.setCurrentIndex(1)
@@ -79,20 +82,15 @@ class TTLWidget(MoninjWidget):
         super().leaveEvent(event)
 
     def override_toggled(self, override):
-        if self.programmatic_change:
-            return
         self.set_mode(self.channel, ("1" if self.level.isChecked() else "0") if override else "exp")
 
     def level_toggled(self, level):
-        if self.programmatic_change:
-            return
         self.set_mode(self.channel, "1" if level else "0")
 
     def refresh_display(self):
-        level = self.cur_override_level if self.cur_override else self.cur_level
-        value_s = "1" if level else "0"
+        value_s = "1" if self.cur_level else "0"
 
-        if self.cur_override:
+        if self.override.isChecked():
             value_s = f"<b>{value_s}</b>"
             color = ' color="red"'
         else:
@@ -100,14 +98,8 @@ class TTLWidget(MoninjWidget):
         self.value.setText(f'<font size="5"{color}>{value_s}</font>')
         self.direction.setText(f'<font size="2">{"OUT" if self.force_out or self.cur_oe else "IN"}</font>')
 
-        try:
-            self.programmatic_change = True
-            self.override.setChecked(self.cur_override)
-            if self.cur_override:
-                self.stack.setCurrentIndex(1)
-                self.level.setChecked(level)
-        finally:
-            self.programmatic_change = False
+        if self.override.isChecked():
+            self.stack.setCurrentIndex(1)
 
     @property
     def sort_key(self):
@@ -128,19 +120,17 @@ class TTLWidget(MoninjWidget):
         conn = self.dm.core_connection
         if conn:
             if mode == "0":
-                self.cur_override = True
-                self.cur_level = False
+                self.override.setChecked(True)
                 conn.inject(channel, TTLOverride.level.value, 0)
                 conn.inject(channel, TTLOverride.oe.value, 1)
                 conn.inject(channel, TTLOverride.en.value, 1)
             elif mode == "1":
-                self.cur_override = True
-                self.cur_level = True
+                self.override.setChecked(True)
                 conn.inject(channel, TTLOverride.level.value, 1)
                 conn.inject(channel, TTLOverride.oe.value, 1)
                 conn.inject(channel, TTLOverride.en.value, 1)
             elif mode == "exp":
-                self.cur_override = False
+                self.override.setChecked(False)
                 conn.inject(channel, TTLOverride.en.value, 0)
             else:
                 raise ValueError
@@ -149,13 +139,13 @@ class TTLWidget(MoninjWidget):
 
     def on_monitor(self, *, probe, value, **_):
         if probe == TTLProbe.level.value:
-            self.cur_level = bool(value)
+            self.level.setChecked(bool(value))
         elif probe == TTLProbe.oe.value:
             self.cur_oe = bool(value)
 
     def on_injection_status(self, *, override, value, **_):
         if override == TTLOverride.en.value:
-            self.cur_override = bool(value)
+            self.override.setChecked(bool(value))
         if override == TTLOverride.level.value:
             self.cur_override_level = bool(value)
 

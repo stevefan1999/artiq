@@ -7,7 +7,6 @@ from artiq.coredevice.ad9910 import AD9910_REG_PROFILE0, AD9910_REG_PROFILE7, \
     AD9910_REG_FTW, AD9910_REG_ASF
 from artiq.coredevice.ad9912_reg import AD9912_POW1
 from artiq.dashboard.moninj_widgets import MoninjWidget
-from artiq.dashboard.moninj_widgets.ttl import TTLWidget
 from artiq.gui.tools import LayoutWidget
 from artiq.language.units import MHz
 
@@ -84,13 +83,10 @@ class UrukulWidget(MoninjWidget):
         grid.setRowStretch(3, 0)
         grid.setRowStretch(4, 1)
 
-        self.programmatic_change = False
-        self.override.clicked.connect(self.override_toggled)
-        self.level.clicked.connect(self.level_toggled)
+        self.override.toggled.connect(self.override_toggled)
+        self.override.toggled.connect(self.refresh_display)
+        self.level.toggled.connect(self.refresh_display)
 
-        self.cur_level = False
-        self.cur_override = False
-        self.cur_override_level = False
         self.cur_frequency = 0
         self.cur_amp = 0
         self.cur_reg = 0
@@ -116,13 +112,6 @@ class UrukulWidget(MoninjWidget):
         comm = self.dm.core_connection
         if comm:
             comm.inject(self.bus_channel, 0, int(override))
-            TTLWidget.set_mode(self, ("1" if self.level.isChecked() else "0") if override else "exp", channel=self.sw_channel)
-
-    def level_toggled(self, level):
-        if self.programmatic_change:
-            return
-        if self.override.isChecked():
-            TTLWidget.set_mode(self, "1" if level else "0", channel=self.sw_channel)
 
     def update_reg(self, reg):
         if self.is_9910:
@@ -163,22 +152,15 @@ class UrukulWidget(MoninjWidget):
         on_off = self.cur_override_level if self.cur_override else self.cur_level
         on_off_s = "ON" if on_off else "OFF"
 
-        if self.cur_override:
+        if self.override.isChecked():
             on_off_s = f"<b>{on_off_s}</b>"
             color = ' color="red"'
         else:
             color = ""
         self.on_off_label.setText(f'<font size="2">{on_off_s}</font>')
-        self.freq_label.setText(f'<font size="4"{color}>{self.cur_frequency / MHz:.3f}</font>')
-        self.programmatic_change = True
-        try:
-            self.override.setChecked(self.cur_override)
-            if self.cur_override:
-                self.stack.setCurrentIndex(1)
-                self.freq_stack.setCurrentIndex(1)
-                self.level.setChecked(self.cur_level)
-        finally:
-            self.programmatic_change = False
+        self.freq_label.setText(f'<font size="4"{color}>{self.cur_frequency:.3f}</font>')
+        if self.override.isChecked():
+            self.stack.setCurrentIndex(1)
 
     @property
     def sort_key(self):
