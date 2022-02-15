@@ -28,11 +28,12 @@ class UrukulWidget(MoninjWidget):
         self.setFrameShadow(QFrame.Raised)
 
         grid = QGridLayout()
-        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setContentsMargins(10, 10, 10, 10)
         grid.setSpacing(0)
         self.setLayout(grid)
         label = QLabel(title)
         label.setAlignment(Qt.AlignCenter)
+        label.setMinimumWidth(100)
         label.setSizePolicy(QSizePolicy.Ignored,
                             QSizePolicy.Preferred)
         grid.addWidget(label, 1, 1)
@@ -67,12 +68,12 @@ class UrukulWidget(MoninjWidget):
         self.freq_label = QLabel()
         self.freq_label.setAlignment(Qt.AlignCenter)
         self.freq_label.setMaximumWidth(100)
-        self.freq_label.setSizePolicy(QSizePolicy.Ignored,
+        self.freq_label.setSizePolicy(QSizePolicy.Preferred,
                                       QSizePolicy.Preferred)
         self.freq_stack.addWidget(self.freq_label)
         unit = QLabel()
         unit.setAlignment(Qt.AlignCenter)
-        unit.setText('<font size="2">  MHz</font>')
+        unit.setText(' MHz')
         grid_freq.addWidget(unit, 1, 2)
         grid_freq.setColumnStretch(1, 1)
         grid_freq.setColumnStretch(2, 0)

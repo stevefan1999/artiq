@@ -18,13 +18,12 @@ class TTLWidget(MoninjWidget):
         self.setFrameShadow(QFrame.Raised)
 
         grid = QGridLayout()
-        grid.setContentsMargins(0, 0, 0, 0)
-        grid.setHorizontalSpacing(0)
-        grid.setVerticalSpacing(0)
+        grid.setContentsMargins(10, 10, 10, 10)
+        grid.setSpacing(0)
         self.setLayout(grid)
         label = QLabel(title)
         label.setAlignment(Qt.AlignCenter)
-        label.setSizePolicy(QSizePolicy.Ignored,
+        label.setSizePolicy(QSizePolicy.Preferred,
                             QSizePolicy.Preferred)
         grid.addWidget(label, 1, 1)
 
@@ -56,8 +55,8 @@ class TTLWidget(MoninjWidget):
         grid.addWidget(self.value, 3, 1)
 
         grid.setRowStretch(1, 1)
-        grid.setRowStretch(2, 0)
-        grid.setRowStretch(3, 0)
+        grid.setRowStretch(2, 1)
+        grid.setRowStretch(3, 1)
         grid.setRowStretch(4, 1)
 
         self.programmatic_change = False
