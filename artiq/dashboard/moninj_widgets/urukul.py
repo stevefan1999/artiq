@@ -112,9 +112,7 @@ class UrukulWidget(MoninjWidget):
         super().leaveEvent(event)
 
     def override_toggled(self, override):
-        if self.programmatic_change:
-            return
-        comm = self.dm.comm
+        comm = self.dm.core_connection
         if comm:
             comm.inject(self.bus_channel, 0, int(override))
             TTLWidget.set_mode(self, ("1" if self.level.isChecked() else "0") if override else "exp", channel=self.sw_channel)
@@ -186,7 +184,7 @@ class UrukulWidget(MoninjWidget):
         return self.bus_channel, self.channel
 
     def setup_monitoring(self, enable):
-        comm = self.dm.comm
+        comm = self.dm.core_connection
         if comm:
             comm.monitor_probe(enable, self.bus_channel, self.channel)  # register addresses
             comm.monitor_probe(enable, self.bus_channel, self.channel + 4)  # first data

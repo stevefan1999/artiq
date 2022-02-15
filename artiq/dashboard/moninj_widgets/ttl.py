@@ -115,7 +115,7 @@ class TTLWidget(MoninjWidget):
         return self.channel
 
     def setup_monitoring(self, enable):
-        conn = self.dm.comm
+        conn = self.dm.core_connection
         if conn:
             conn.monitor_probe(enable, self.channel, TTLProbe.level.value)
             conn.monitor_probe(enable, self.channel, TTLProbe.oe.value)
@@ -126,7 +126,7 @@ class TTLWidget(MoninjWidget):
                 conn.get_injection_status(self.channel, TTLOverride.en.value)
 
     def set_mode(self, channel, mode):
-        conn = self.dm.comm
+        conn = self.dm.core_connection
         if conn:
             if mode == "0":
                 self.cur_override = True

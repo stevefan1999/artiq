@@ -17,7 +17,7 @@ class DACWidget(SimpleDisplayWidget):
         return self.spi_channel, self.channel
 
     def setup_monitoring(self, enable):
-        conn = self.dm.comm
+        conn = self.dm.core_connection
         if conn:
             conn.monitor_probe(enable, self.spi_channel, self.channel)
 
