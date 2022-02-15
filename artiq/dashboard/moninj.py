@@ -191,6 +191,10 @@ class _DeviceManager:
             if comment:
                 widget.setToolTip(comment)
             self.docks[klass].add(uid, widget)
+        for widget in self.widgets:
+            if hasattr(widget, "on_all_widgets_initialized"):
+                widget.on_init()
+            widget.refresh_display()
         self.description = new_desc
         for container in self.docks.values():
             if len(container.values()) > 0:

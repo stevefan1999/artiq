@@ -7,6 +7,7 @@ from artiq.coredevice.ad9910 import AD9910_REG_PROFILE0, AD9910_REG_PROFILE7, \
     AD9910_REG_FTW, AD9910_REG_ASF
 from artiq.coredevice.ad9912_reg import AD9912_POW1
 from artiq.dashboard.moninj_widgets import MoninjWidget
+from artiq.dashboard.moninj_widgets.ttl import TTLWidget
 from artiq.gui.tools import LayoutWidget
 from artiq.language.units import MHz
 
@@ -96,6 +97,20 @@ class UrukulWidget(MoninjWidget):
         sysclk = ref_clk / clk_mult[clk_div] * pll
         self.ftw_per_hz = 1 / sysclk * max_freq
 
+        # TTL Widget of Urukul
+        self.ttl = None
+
+    def on_all_widgets_initialized(self):
+        docks = self.dm.docks
+        if docks:
+            ttl = docks[TTLWidget].get_by_key(self.sw_channel)
+            if ttl:
+                self.ttl = ttl
+                self.override.toggled.connect(ttl.override.setChecked)
+                self.level.toggled.connect(ttl.level.setChecked)
+                ttl.override.toggled.connect(self.override.setChecked)
+                ttl.level.toggled.connect(self.level.setChecked)
+
     @property
     def cur_freq(self):
         return (self.cur_frequency_low + self.cur_frequency_high) / MHz
@@ -152,8 +167,7 @@ class UrukulWidget(MoninjWidget):
         return asf / float(0x3ffe)  # coredevice.ad9912 doesn't allow amplitude control so only need to worry about 9910
 
     def refresh_display(self):
-        on_off = self.cur_override_level if self.cur_override else self.cur_level
-        on_off_s = "ON" if on_off else "OFF"
+        on_off_s = "ON" if self.ttl.cur_level else "OFF"
 
         if self.override.isChecked():
             on_off_s = f"<b>{on_off_s}</b>"
