@@ -26,7 +26,7 @@ mod local_moninj {
         unsafe {
             csr::rtio_moninj::inj_chan_sel_write(channel as _);
             csr::rtio_moninj::inj_override_sel_write(overrd);
-            csr::rtio_moninj::inj_value_write(value.to_be());
+            csr::rtio_moninj::inj_value_write(value);
         }
     }
 
@@ -34,7 +34,7 @@ mod local_moninj {
         unsafe {
             csr::rtio_moninj::inj_chan_sel_write(channel as _);
             csr::rtio_moninj::inj_override_sel_write(overrd);
-            csr::rtio_moninj::inj_value_read().to_be()
+            csr::rtio_moninj::inj_value_read()
         }
     }
 }
@@ -146,13 +146,16 @@ fn connection_worker(io: &Io, _aux_mutex: &Mutex, _routing_table: &drtio_routing
                         let _ = inject_watch_list.remove(&(channel, overrd));
                     }
                 },
-                HostMessage::Inject { channel, overrd, value } => dispatch!(io, _aux_mutex, _routing_table, channel, inject, overrd, value),
+                HostMessage::Inject { channel, overrd, value } => {
+                    let value = value.to_be();
+                    dispatch!(io, _aux_mutex, _routing_table, channel, inject, overrd, value)
+                },
                 HostMessage::GetInjectionStatus { channel, overrd } => {
                     let value = dispatch!(io, _aux_mutex, _routing_table, channel, read_injection_status, overrd);
                     let reply = DeviceMessage::InjectionStatus {
                         channel: channel,
                         overrd: overrd,
-                        value: value
+                        value: value.to_be()
                     };
 
                     trace!("moninj->host {:?}", reply);
@@ -185,7 +188,7 @@ fn connection_worker(io: &Io, _aux_mutex: &Mutex, _routing_table: &drtio_routing
                     let message = DeviceMessage::InjectionStatus {
                         channel: channel,
                         overrd: overrd,
-                        value: current
+                        value: current.to_be()
                     };
 
                     trace!("moninj->host {:?}", message);
