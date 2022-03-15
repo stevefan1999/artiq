@@ -270,9 +270,7 @@ class _UrukulWidget(QtWidgets.QFrame):
         self.override.toggled.connect(self.refresh_display)
         self.level.toggled.connect(self.refresh_display)
 
-        self.cur_frequency_low = 0
-        self.cur_frequency_high = 0
-        self.cur_amp = 0
+        self.cur_frequency = 0
         self.cur_reg = 0
 
         max_freq, clk_mult = (1 << 32, [4, 1, 2, 4]) if is_9910 else (1 << 48, [1, 1, 2, 4])
@@ -293,10 +291,6 @@ class _UrukulWidget(QtWidgets.QFrame):
                 ttl.override.toggled.connect(self.override.setChecked)
                 ttl.level.toggled.connect(self.level.setChecked)
 
-    @property
-    def cur_freq(self):
-        return (self.cur_frequency_low + self.cur_frequency_high) / MHz
-
     def enterEvent(self, event):
         self.stack.setCurrentIndex(1)
         self.freq_stack.setCurrentIndex(1)
@@ -310,43 +304,18 @@ class _UrukulWidget(QtWidgets.QFrame):
     def override_toggled(self, override):
         comm = self.dm.core_connection
         if comm:
-            comm.inject(self.bus_channel, 0, int(override))
+            comm.inject(self.bus_channel, TTLOverride.en.value, int(override))
 
-    def update_reg(self, reg):
-        if self.is_9910:
-            self.cur_reg = (reg >> 24) & 0xff
-        else:
-            self.cur_reg = ((reg >> 16) & ~(3 << 13)) & 0xffff
-
-    def update_data_high(self, data):
+    def update_data(self, data):
         if self.is_9910:
             if AD9910_REG_PROFILE0() <= self.cur_reg <= AD9910_REG_PROFILE7():
-                asf = (data >> 16) & 0xffff
-                self.cur_amp = self._asf_to_amp(asf)
+                self.cur_frequency = self._ftw_to_freq(data)
         else:
             if self.cur_reg == AD9912_POW1:
-                ftw = self._ftw_to_freq(int64(data & 0xffff) << 32)
-                self.cur_frequency_high = ftw
-
-    def update_data_low(self, data):
-        if self.is_9910:
-            if (AD9910_REG_PROFILE0() <= self.cur_reg <= AD9910_REG_PROFILE7() or
-                    self.cur_reg == AD9910_REG_FTW()):
-                self.cur_frequency_low = self._ftw_to_freq(data)
-            elif self.cur_reg == AD9910_REG_ASF():
-                self.cur_amp = self._asf_to_amp(data)
-        else:
-            if self.cur_reg == AD9912_POW1:
-                # mask to avoid improper sign extension
-                ftw = self._ftw_to_freq(int64(data & 0xffffffff))
-                self.cur_frequency_low = ftw
+                self.cur_frequency = self._ftw_to_freq(data)
 
     def _ftw_to_freq(self, ftw):
         return ftw / self.ftw_per_hz
-
-    @staticmethod
-    def _asf_to_amp(asf):
-        return asf / float(0x3ffe)  # coredevice.ad9912 doesn't allow amplitude control so only need to worry about 9910
 
     def refresh_display(self):
         on_off_s = "ON" if self.ttl.cur_level else "OFF"
@@ -357,7 +326,7 @@ class _UrukulWidget(QtWidgets.QFrame):
         else:
             color = ""
         self.on_off_label.setText(f'<font size="2">{on_off_s}</font>')
-        self.freq_label.setText(f'<font size="4"{color}>{self.cur_freq:.3f}</font>')
+        self.freq_label.setText(f'<font size="4"{color}>{self.cur_frequency/MHz:.3f}</font>')
         if self.override.isChecked():
             self.stack.setCurrentIndex(1)
 
@@ -368,9 +337,8 @@ class _UrukulWidget(QtWidgets.QFrame):
     def setup_monitoring(self, enable):
         comm = self.dm.core_connection
         if comm:
-            comm.monitor_probe(enable, self.bus_channel, self.channel)  # register addresses
-            comm.monitor_probe(enable, self.bus_channel, self.channel + 4)  # first data
-            comm.monitor_probe(enable, self.bus_channel, self.channel + 8)  # second data
+            comm.monitor_probe(enable, self.bus_channel, self.channel)  # register
+            comm.monitor_probe(enable, self.bus_channel, self.channel + 4)  # data
             if self.channel == 0:
                 comm.monitor_injection(enable, self.bus_channel, 0)
                 comm.monitor_injection(enable, self.bus_channel, 1)
@@ -380,13 +348,11 @@ class _UrukulWidget(QtWidgets.QFrame):
 
     def on_monitor(self, probe, value):
         type = probe // 4
-        if type == 0:  # probes 0-3: register addresses
-            self.update_reg(value)
-        elif type == 1:  # probes 4-7: data_high (for 64 bit transfer)
-            self.update_data_high(value)
-        elif type == 2:  # probes 8-11: data_low (for 64 bit) or just data (32 bit)
-            self.update_data_low(value)
-
+        if type == 0:
+            self.cur_reg = value
+        if type == 1:
+            self.update_data(value)
+        self.refresh_display()
     @staticmethod
     def extract_key(*, channel, probe, **_):
         return channel, probe % 4
