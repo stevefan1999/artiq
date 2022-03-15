@@ -76,11 +76,8 @@ class SPIMaster(Module):
 
         # [0] = chip select - CS_DDS_CH0 (i.e. which DDS channel 0-nchannels), [1:4] = override_en,
         # [5:8] = address (spi data/config), [9:12] = data (only going to allow 32-bit override transfers)
-        # self.overrides = Array([Signal(32, reset=0xffff)])
-        # self.overrides += [Signal(32, reset_less=True) for i in range(2 * 4)]
-        # self.overrides += [Signal(32) for i in range(4)]
         override_en = Signal(reset_less=True)
-        override_addr = Signal()
+        override_addr = Signal(32)
         override_data = Signal(32)
         self.overrides = [override_en, override_addr, override_data]
 

@@ -70,7 +70,7 @@ class CommMonInj:
         self._writer.write(packet)
 
     def inject(self, channel, override, value):
-        packet = struct.pack(self.endian + "blbl", 1, channel, override, value)
+        packet = struct.pack(self.endian + "blb4s", 1, channel, override, struct.pack('>l', value))
         self._writer.write(packet)
 
     def get_injection_status(self, channel, override):

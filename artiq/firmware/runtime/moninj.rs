@@ -147,7 +147,6 @@ fn connection_worker(io: &Io, _aux_mutex: &Mutex, _routing_table: &drtio_routing
                     }
                 },
                 HostMessage::Inject { channel, overrd, value } => {
-                    let value = value.to_be();
                     dispatch!(io, _aux_mutex, _routing_table, channel, inject, overrd, value)
                 },
                 HostMessage::GetInjectionStatus { channel, overrd } => {
