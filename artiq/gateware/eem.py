@@ -181,6 +181,11 @@ class Urukul(_EEM):
 
         pads = target.platform.request("urukul{}_io_update".format(eem))
         phy = ttl_out_cls(pads.p, pads.n)
+
+        dds_monitor = urukul_monitor.UrukulMonitor(spi_phy.rtlink, phy)
+        target.submodules += dds_monitor
+        spi_phy.probes.extend(dds_monitor.probes)
+
         target.submodules += phy
         target.rtio_channels.append(rtio.Channel.from_phy(phy))
         if eem_aux is not None:
@@ -190,9 +195,6 @@ class Urukul(_EEM):
                 target.submodules += phy
                 target.rtio_channels.append(rtio.Channel.from_phy(phy))
 
-        dds_monitor = urukul_monitor.UrukulMonitor(spi_phy.rtlink)
-        target.submodules += dds_monitor
-        spi_phy.probes.extend(dds_monitor.probes)
         # spi_phy.overrides.extend(dds_monitor.overrides)
 
 class Sampler(_EEM):
